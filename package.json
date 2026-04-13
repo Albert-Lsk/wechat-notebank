@@ -1,0 +1,30 @@
+{
+  "name": "wechat-notebank",
+  "version": "0.1.0",
+  "description": "Archive WeChat public account articles to Markdown with Progressive Summarization",
+  "main": "dist/index.js",
+  "bin": {
+    "wechat-notebank": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": ["wechat", "archive", "knowledge-base", "markdown"],
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.5",
+    "cheerio": "^1.0.0",
+    "fs-extra": "^11.2.0",
+    "gray-matter": "^4.0.3",
+    "inquirer": "^8.2.5",
+    "puppeteer": "^21.7.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^8.2.10",
+    "@types/node": "^20.11.0",
+    "@types/puppeteer": "^7.0.4",
+    "typescript": "^5.3.3"
+  }
+}
