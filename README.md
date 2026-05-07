@@ -49,7 +49,7 @@
 
 ```bash
 # 当前 npm registry 还未发布时，先从 GitHub 全局安装
-npm install -g github:Albert-Lsk/wechat-notebank
+npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/heads/main.tar.gz
 
 # 发布到 npm 后，可使用这个命令
 npm install -g wechat-notebank
