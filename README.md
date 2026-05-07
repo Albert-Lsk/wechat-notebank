@@ -48,12 +48,18 @@
 ### 安装
 
 ```bash
-# npm 全局安装
+# 当前 npm registry 还未发布时，先从 GitHub 全局安装
+npm install -g github:Albert-Lsk/wechat-notebank
+
+# 发布到 npm 后，可使用这个命令
 npm install -g wechat-notebank
 
-# 或者一行命令直接运行（无需安装）
+# 发布到 npm 后，也可以一行命令直接运行（无需安装）
 npx wechat-notebank <command>
 ```
+
+> 如果 `npm install -g wechat-notebank` 返回 `404 Not Found`，说明包还没有发布到 npm registry。
+> 维护者登录 npm 后在项目根目录执行 `npm publish --access public`，发布成功后上面的 npm/npx 命令才会生效。
 
 ### 初始化
 
