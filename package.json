@@ -37,13 +37,12 @@
     "fs-extra": "^11.2.0",
     "gray-matter": "^4.0.3",
     "inquirer": "^8.2.5",
-    "puppeteer": "^21.7.0"
+    "puppeteer-core": "^24.43.0"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
     "@types/inquirer": "^8.2.10",
     "@types/node": "^20.11.0",
-    "@types/puppeteer": "^7.0.4",
     "typescript": "^5.3.3"
   }
 }

@@ -40,13 +40,13 @@ exports.fetchArticleHtml = fetchArticleHtml;
 exports.parseWechatArticle = parseWechatArticle;
 exports.buildMeta = buildMeta;
 const cheerio = __importStar(require("cheerio"));
-const puppeteer_1 = __importDefault(require("puppeteer"));
+const puppeteer_core_1 = __importDefault(require("puppeteer-core"));
 /**
  * 使用 Puppeteer 获取微信公众号文章 HTML
  * 微信公众号有较强的反爬机制，需要使用无头浏览器
  */
 async function fetchArticleHtml(url) {
-    const browser = await puppeteer_1.default.launch({
+    const launchOptions = {
         headless: true,
         args: [
             '--no-sandbox',
@@ -55,7 +55,14 @@ async function fetchArticleHtml(url) {
             '--disable-accelerated-2d-canvas',
             '--disable-gpu',
         ],
-    });
+    };
+    if (process.env.WECHAT_NOTEBANK_CHROME_PATH) {
+        launchOptions.executablePath = process.env.WECHAT_NOTEBANK_CHROME_PATH;
+    }
+    else {
+        launchOptions.channel = 'chrome';
+    }
+    const browser = await puppeteer_core_1.default.launch(launchOptions);
     try {
         const page = await browser.newPage();
         // 设置 User-Agent

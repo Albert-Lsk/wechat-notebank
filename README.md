@@ -61,6 +61,8 @@ npx wechat-notebank <command>
 > 如果 `npm install -g wechat-notebank` 返回 `404 Not Found`，说明包还没有发布到 npm registry。
 > 维护者登录 npm 后在项目根目录执行 `npm publish --access public`，发布成功后上面的 npm/npx 命令才会生效。
 
+从 GitHub 安装会使用本机已安装的 Chrome。如果你的 Chrome 不在默认路径，可设置 `WECHAT_NOTEBANK_CHROME_PATH` 指向 Chrome 可执行文件。
+
 ### 初始化
 
 ```bash

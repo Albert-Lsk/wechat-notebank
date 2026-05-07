@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import puppeteer from 'puppeteer';
+import puppeteer, { LaunchOptions } from 'puppeteer-core';
 import { ParseResult, ArticleMeta } from '../types';
 
 /**
@@ -7,7 +7,7 @@ import { ParseResult, ArticleMeta } from '../types';
  * 微信公众号有较强的反爬机制，需要使用无头浏览器
  */
 export async function fetchArticleHtml(url: string): Promise<string> {
-  const browser = await puppeteer.launch({
+  const launchOptions: LaunchOptions = {
     headless: true,
     args: [
       '--no-sandbox',
@@ -16,7 +16,15 @@ export async function fetchArticleHtml(url: string): Promise<string> {
       '--disable-accelerated-2d-canvas',
       '--disable-gpu',
     ],
-  });
+  };
+
+  if (process.env.WECHAT_NOTEBANK_CHROME_PATH) {
+    launchOptions.executablePath = process.env.WECHAT_NOTEBANK_CHROME_PATH;
+  } else {
+    launchOptions.channel = 'chrome';
+  }
+
+  const browser = await puppeteer.launch(launchOptions);
 
   try {
     const page = await browser.newPage();
