@@ -78,6 +78,16 @@ wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx
 
 就这样，一秒钟后文章就安全地躺在你的知识库里了。
 
+也可以把单篇文章保存到指定文件夹：
+
+```bash
+wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx --output ~/WeChatArticles
+# 或
+wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx -o ~/WeChatArticles
+```
+
+如果目标文件夹不存在，工具会自动创建。
+
 ## 🗂️ Progressive Summarization 架构
 
 这不是普通的文件夹，这是 Tiago Forte 提出的**渐进式摘要法**，专门为知识工作者的阅读流程设计：
@@ -119,6 +129,7 @@ wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx
 ```
 1️⃣  看到一篇好文章
 2️⃣  wechat-notebank fetch <url>     # 存入 L1_原文
+    或 wechat-notebank fetch <url> --output <文件夹地址>
 3️⃣  深度阅读，提炼要点               # 创建 L2_原子卡片
 4️⃣  觉得这个概念很棒                 # 精选到 L3_引用素材
 5️⃣  下次写文章时直接调用             # 在 L4_原创文章 中创作
@@ -141,7 +152,8 @@ wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx
 | 命令 | 说明 |
 |------|------|
 | `wechat-notebank init` | 初始化知识库 |
-| `wechat-notebank fetch <url>` | 存档文章 |
+| `wechat-notebank fetch <url>` | 存档文章到默认知识库 |
+| `wechat-notebank fetch <url> --output <folder>` | 存档文章到指定文件夹 |
 | `wechat-notebank --help` | 显示帮助 |
 
 ## 📄 文章元数据

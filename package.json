@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node tests/fetch-args.test.js && node tests/resolve-archive-path.test.js && node tests/storage.test.js",
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js"
   },

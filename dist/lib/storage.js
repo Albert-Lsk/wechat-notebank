@@ -68,6 +68,7 @@ function generateFilename(title) {
     return `${timestamp}-${safeTitle || 'untitled'}.md`;
 }
 async function saveArticle(archivePath, title, content, meta) {
+    await fs.ensureDir(archivePath);
     const filename = generateFilename(title);
     const filePath = path.join(archivePath, filename);
     const fileContent = gray_matter_1.default.stringify(content, meta);

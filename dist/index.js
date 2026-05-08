@@ -4,10 +4,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const init_1 = require("./commands/init");
 const fetch_1 = require("./commands/fetch");
 const config_1 = require("./lib/config");
+const cli_1 = require("./lib/cli");
 async function main() {
     const args = process.argv.slice(2);
     const command = args[0];
-    const url = args[1];
     // 帮助信息
     if (command === '--help' || command === '-h' || !command) {
         console.log(`
@@ -15,12 +15,14 @@ wechat-notebank - 微信公众号文章存档工具 🏦
 
 使用方法:
   wechat-notebank init                    初始化知识库
-  wechat-notebank fetch <url>              存档文章
+  wechat-notebank fetch <url> [--output <folder>]
+                                          存档文章
   wechat-notebank --help                  显示帮助
 
 示例:
   wechat-notebank init
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
+  wechat-notebank fetch https://mp.weixin.qq.com/s/xxx --output ~/WeChatArticles
 
 首次使用会自动引导初始化设置。
     `);
@@ -33,18 +35,28 @@ wechat-notebank - 微信公众号文章存档工具 🏦
     }
     // fetch 命令
     if (command === 'fetch') {
-        if (!url) {
-            console.error('❌ 请提供文章链接');
-            console.error('   用法: wechat-notebank fetch <url>');
+        let fetchArgs;
+        try {
+            fetchArgs = (0, cli_1.parseFetchArgs)(args.slice(1));
+        }
+        catch (error) {
+            console.error(`❌ ${error instanceof Error ? error.message : '参数错误'}`);
+            console.error('   用法: wechat-notebank fetch <url> [--output <folder>]');
             process.exit(1);
         }
-        // 检查配置，不存在则引导初始化
-        if (!(await (0, config_1.configExists)())) {
+        const { url, outputPath } = fetchArgs;
+        if (!url) {
+            console.error('❌ 请提供文章链接');
+            console.error('   用法: wechat-notebank fetch <url> [--output <folder>]');
+            process.exit(1);
+        }
+        // 未指定输出目录时，沿用默认配置；不存在则引导初始化
+        if (!outputPath && !(await (0, config_1.configExists)())) {
             console.log('🤖 首次使用，正在引导初始化...\n');
             await (0, init_1.initCommand)();
             console.log('');
         }
-        await (0, fetch_1.fetchCommand)(url);
+        await (0, fetch_1.fetchCommand)(url, outputPath);
         return;
     }
     // 未知命令

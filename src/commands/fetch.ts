@@ -1,12 +1,16 @@
 import { fetchArticleHtml, parseWechatArticle, buildMeta } from '../lib/parser';
 import { saveArticle } from '../lib/storage';
 import { readConfig } from '../lib/config';
+import { WechatNotebankConfig } from '../types';
 
-export async function fetchCommand(url: string): Promise<void> {
+export async function fetchCommand(url: string, outputPath?: string): Promise<void> {
   // 检查配置
   const config = await readConfig();
-  if (!config) {
-    console.log('❌ 未找到配置文件，请先运行 wechat-notebank init');
+  let archivePath: string;
+  try {
+    archivePath = resolveArchivePath(config, outputPath);
+  } catch (error) {
+    console.log(`❌ ${error instanceof Error ? error.message : '未知错误'}`);
     return;
   }
 
@@ -24,7 +28,7 @@ export async function fetchCommand(url: string): Promise<void> {
 
     // 保存文件
     const filePath = await saveArticle(
-      config.archivePath,
+      archivePath,
       parseResult.title,
       parseResult.content,
       meta
@@ -40,4 +44,19 @@ export async function fetchCommand(url: string): Promise<void> {
     console.error(`\n❌ 错误: ${error instanceof Error ? error.message : '未知错误'}`);
     process.exit(1);
   }
+}
+
+export function resolveArchivePath(
+  config: Pick<WechatNotebankConfig, 'archivePath'> | null,
+  outputPath?: string
+): string {
+  if (outputPath) {
+    return outputPath;
+  }
+
+  if (!config) {
+    throw new Error('未找到配置文件，请先运行 wechat-notebank init，或使用 --output <folder> 指定保存目录');
+  }
+
+  return config.archivePath;
 }

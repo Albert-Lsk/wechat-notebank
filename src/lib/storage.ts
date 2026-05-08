@@ -36,6 +36,8 @@ export async function saveArticle(
   content: string,
   meta: ArticleMeta
 ): Promise<string> {
+  await fs.ensureDir(archivePath);
+
   const filename = generateFilename(title);
   const filePath = path.join(archivePath, filename);
 
