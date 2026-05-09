@@ -3,6 +3,10 @@ export interface FetchArgs {
   outputPath?: string;
 }
 
+export interface ImportArgs {
+  filePath: string;
+}
+
 export function parseFetchArgs(args: string[]): FetchArgs {
   const [url, ...options] = args;
   let outputPath: string | undefined;
@@ -24,4 +28,18 @@ export function parseFetchArgs(args: string[]): FetchArgs {
   }
 
   return { url, outputPath };
+}
+
+export function parseImportArgs(args: string[]): ImportArgs {
+  const [filePath, ...options] = args;
+
+  if (!filePath) {
+    throw new Error('请提供 Excel 文件地址');
+  }
+
+  for (const option of options) {
+    throw new Error(`Unknown import option: ${option}`);
+  }
+
+  return { filePath };
 }

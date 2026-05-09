@@ -88,6 +88,22 @@ wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx -o ~/WeChatArticles
 
 如果目标文件夹不存在，工具会自动创建。
 
+### 批量导入
+
+把文章表格整理成 Excel 文件，前三列分别是：
+
+| 序号 | 链接 | 文件地址 |
+|------|------|----------|
+| 1 | `https://mp.weixin.qq.com/s/xxxxx` | `~/WeChatArticles` |
+
+然后运行：
+
+```bash
+wechat-notebank import ./articles.xlsx
+```
+
+工具会按行读取表格，把每一行的文章保存到对应的文件夹。任意一行缺少序号、链接或文件地址时，会跳过这一行。Numbers 表格请先导出为 Excel（`.xlsx`）后再导入。
+
 ## 🗂️ Progressive Summarization 架构
 
 这不是普通的文件夹，这是 Tiago Forte 提出的**渐进式摘要法**，专门为知识工作者的阅读流程设计：

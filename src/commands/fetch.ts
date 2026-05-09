@@ -1,7 +1,12 @@
 import { fetchArticleHtml, parseWechatArticle, buildMeta } from '../lib/parser';
 import { saveArticle } from '../lib/storage';
 import { readConfig } from '../lib/config';
-import { WechatNotebankConfig } from '../types';
+import { ArticleMeta, WechatNotebankConfig } from '../types';
+
+export interface ArchiveArticleResult {
+  filePath: string;
+  meta: ArticleMeta;
+}
 
 export async function fetchCommand(url: string, outputPath?: string): Promise<void> {
   // 检查配置
@@ -17,22 +22,7 @@ export async function fetchCommand(url: string, outputPath?: string): Promise<vo
   console.log(`📥 正在获取文章: ${url}`);
 
   try {
-    // 获取 HTML
-    const html = await fetchArticleHtml(url);
-
-    // 解析文章
-    const parseResult = parseWechatArticle(html, url);
-
-    // 构建元数据
-    const meta = buildMeta(parseResult, url);
-
-    // 保存文件
-    const filePath = await saveArticle(
-      archivePath,
-      parseResult.title,
-      parseResult.content,
-      meta
-    );
+    const { filePath, meta } = await archiveArticle(url, archivePath);
 
     console.log(`\n✅ 文章已保存！`);
     console.log(`📄 文件: ${filePath}`);
@@ -44,6 +34,30 @@ export async function fetchCommand(url: string, outputPath?: string): Promise<vo
     console.error(`\n❌ 错误: ${error instanceof Error ? error.message : '未知错误'}`);
     process.exit(1);
   }
+}
+
+export async function archiveArticle(
+  url: string,
+  archivePath: string
+): Promise<ArchiveArticleResult> {
+  // 获取 HTML
+  const html = await fetchArticleHtml(url);
+
+  // 解析文章
+  const parseResult = parseWechatArticle(html, url);
+
+  // 构建元数据
+  const meta = buildMeta(parseResult, url);
+
+  // 保存文件
+  const filePath = await saveArticle(
+    archivePath,
+    parseResult.title,
+    parseResult.content,
+    meta
+  );
+
+  return { filePath, meta };
 }
 
 export function resolveArchivePath(

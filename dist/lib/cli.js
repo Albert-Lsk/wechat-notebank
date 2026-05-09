@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseFetchArgs = parseFetchArgs;
+exports.parseImportArgs = parseImportArgs;
 function parseFetchArgs(args) {
     const [url, ...options] = args;
     let outputPath;
@@ -18,4 +19,14 @@ function parseFetchArgs(args) {
         throw new Error(`Unknown fetch option: ${option}`);
     }
     return { url, outputPath };
+}
+function parseImportArgs(args) {
+    const [filePath, ...options] = args;
+    if (!filePath) {
+        throw new Error('请提供 Excel 文件地址');
+    }
+    for (const option of options) {
+        throw new Error(`Unknown import option: ${option}`);
+    }
+    return { filePath };
 }

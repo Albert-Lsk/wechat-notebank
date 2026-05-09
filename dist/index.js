@@ -3,6 +3,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const init_1 = require("./commands/init");
 const fetch_1 = require("./commands/fetch");
+const import_1 = require("./commands/import");
 const config_1 = require("./lib/config");
 const cli_1 = require("./lib/cli");
 async function main() {
@@ -17,12 +18,14 @@ wechat-notebank - 微信公众号文章存档工具 🏦
   wechat-notebank init                    初始化知识库
   wechat-notebank fetch <url> [--output <folder>]
                                           存档文章
+  wechat-notebank import <Excel文件地址>   批量导入文章
   wechat-notebank --help                  显示帮助
 
 示例:
   wechat-notebank init
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx --output ~/WeChatArticles
+  wechat-notebank import ./articles.xlsx
 
 首次使用会自动引导初始化设置。
     `);
@@ -57,6 +60,26 @@ wechat-notebank - 微信公众号文章存档工具 🏦
             console.log('');
         }
         await (0, fetch_1.fetchCommand)(url, outputPath);
+        return;
+    }
+    // import 命令
+    if (command === 'import') {
+        let importArgs;
+        try {
+            importArgs = (0, cli_1.parseImportArgs)(args.slice(1));
+        }
+        catch (error) {
+            console.error(`❌ ${error instanceof Error ? error.message : '参数错误'}`);
+            console.error('   用法: wechat-notebank import <Excel文件地址>');
+            process.exit(1);
+        }
+        try {
+            await (0, import_1.importCommand)(importArgs.filePath);
+        }
+        catch (error) {
+            console.error(`\n❌ 导入失败: ${error instanceof Error ? error.message : '未知错误'}`);
+            process.exit(1);
+        }
         return;
     }
     // 未知命令
