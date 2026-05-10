@@ -125,6 +125,9 @@ function parseWechatArticle(html, url) {
     else if ($('.time').length) {
         pubDate = $('.time').text().trim();
     }
+    if (!pubDate) {
+        pubDate = extractWechatTimestampDate(html);
+    }
     // 获取正文内容
     let content = '';
     if ($('#js_content').length) {
@@ -173,12 +176,49 @@ function cleanHtml(html) {
 function normalizeDate(dateStr) {
     if (!dateStr)
         return new Date().toISOString().split('T')[0];
+    const chineseDateMatch = dateStr.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+    if (chineseDateMatch) {
+        return formatDateParts(Number(chineseDateMatch[1]), Number(chineseDateMatch[2]), Number(chineseDateMatch[3]));
+    }
+    const numericDateMatch = dateStr.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (numericDateMatch) {
+        return formatDateParts(Number(numericDateMatch[1]), Number(numericDateMatch[2]), Number(numericDateMatch[3]));
+    }
     // 尝试解析日期
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
         return new Date().toISOString().split('T')[0];
     }
     return date.toISOString().split('T')[0];
+}
+function extractWechatTimestampDate(html) {
+    const match = html.match(/\bvar\s+ct\s*=\s*["'](\d{10})["']/);
+    if (!match)
+        return '';
+    const timestamp = Number(match[1]) * 1000;
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime()))
+        return '';
+    return formatDateInTimeZone(date, 'Asia/Shanghai');
+}
+function formatDateParts(year, month, day) {
+    return [
+        String(year).padStart(4, '0'),
+        String(month).padStart(2, '0'),
+        String(day).padStart(2, '0'),
+    ].join('-');
+}
+function formatDateInTimeZone(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts
+        .filter((part) => part.type !== 'literal')
+        .map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
 }
 function buildMeta(result, url) {
     return {
