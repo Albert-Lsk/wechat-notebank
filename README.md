@@ -10,12 +10,15 @@
     |_|\___|_|  |___/\__,_|\__,_|\__,_|\__\___\___|
 ```
 
-[![npm](https://img.shields.io/npm/v/wechat-notebank?style=flat-square)](https://www.npmjs.com/package/wechat-notebank)
+[![Install from GitHub](https://img.shields.io/badge/install-GitHub-black?style=flat-square)](#安装)
 [![MIT License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
 ## ✨ 特性
 
 - 📥 **一行命令**，永久保存微信公众号文章
+- 📁 **指定目录保存**，单篇文章可直接写入任意文件夹
+- 📊 **Excel 批量导入**，一张表批量抓取并保存到不同目录
+- 🗓️ **按发布日期命名**，文件名自动使用文章真实发布日期
 - 🧠 **渐进式摘要法** (Progressive Summarization) 架构，让知识有序沉淀
 - 📄 **Markdown + Frontmatter**，优雅的元数据管理
 - 🔄 **零门槛上手**，首次使用自动引导配置
@@ -47,21 +50,23 @@
 
 ### 安装
 
+目前推荐从 GitHub 安装：
+
 ```bash
-# 当前 npm registry 还未发布时，先从 GitHub 全局安装
 npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/heads/main.tar.gz
+```
 
-# 发布到 npm 后，可使用这个命令
+`wechat-notebank` 还没有发布到 npm registry。发布后也可以使用：
+
+```bash
 npm install -g wechat-notebank
-
-# 发布到 npm 后，也可以一行命令直接运行（无需安装）
 npx wechat-notebank <command>
 ```
 
 > 如果 `npm install -g wechat-notebank` 返回 `404 Not Found`，说明包还没有发布到 npm registry。
 > 维护者登录 npm 后在项目根目录执行 `npm publish --access public`，发布成功后上面的 npm/npx 命令才会生效。
 
-从 GitHub 安装会使用本机已安装的 Chrome。如果你的 Chrome 不在默认路径，可设置 `WECHAT_NOTEBANK_CHROME_PATH` 指向 Chrome 可执行文件。
+工具会调用本机已安装的 Chrome 抓取微信公众号文章。如果你的 Chrome 不在默认路径，可设置 `WECHAT_NOTEBANK_CHROME_PATH` 指向 Chrome 可执行文件。
 
 ### 初始化
 
@@ -76,7 +81,7 @@ wechat-notebank init
 wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx
 ```
 
-就这样，一秒钟后文章就安全地躺在你的知识库里了。
+如果没有指定输出目录，文章会保存到配置文件里的默认知识库路径。首次使用时，工具会自动引导你创建配置。
 
 也可以把单篇文章保存到指定文件夹：
 
@@ -88,13 +93,22 @@ wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx -o ~/WeChatArticles
 
 如果目标文件夹不存在，工具会自动创建。
 
+保存后的文件名格式为：
+
+```text
+YYYY-MM-DD-文章标题.md
+```
+
+其中 `YYYY-MM-DD` 来自微信公众号文章的真实发布时间，不是抓取时间。若同名文件已存在，工具会自动追加 `-2`、`-3` 等序号，避免覆盖已有文件。
+
 ### 批量导入
 
-把文章表格整理成 Excel 文件，前三列分别是：
+把文章表格整理成 Excel 文件，读取第一个工作表。前三列分别是：
 
 | 序号 | 链接 | 文件地址 |
 |------|------|----------|
 | 1 | `https://mp.weixin.qq.com/s/xxxxx` | `~/WeChatArticles` |
+| 2 | `https://mp.weixin.qq.com/s/yyyyy` | `/Users/you/Documents/AI-Bloggers` |
 
 然后运行：
 
@@ -102,7 +116,12 @@ wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx -o ~/WeChatArticles
 wechat-notebank import ./articles.xlsx
 ```
 
-工具会按行读取表格，把每一行的文章保存到对应的文件夹。任意一行缺少序号、链接或文件地址时，会跳过这一行。Numbers 表格请先导出为 Excel（`.xlsx`）后再导入。
+工具会按行读取表格，把每一行的文章保存到对应的文件夹。
+
+- 第一行可以是表头，表头形如 `序号 / 链接 / 文件地址` 时会自动跳过。
+- 任意一行缺少序号、链接或文件地址时，会跳过这一行。
+- 某一行抓取失败不会中断后续行，导入结束后会输出失败明细。
+- Numbers 表格请先导出为 Excel（`.xlsx`）后再导入。
 
 ## 🗂️ Progressive Summarization 架构
 
@@ -142,9 +161,10 @@ wechat-notebank import ./articles.xlsx
 1️⃣  看到一篇好文章
 2️⃣  wechat-notebank fetch <url>     # 存入 L1_原文
     或 wechat-notebank fetch <url> --output <文件夹地址>
-3️⃣  深度阅读，提炼要点               # 创建 L2_原子卡片
-4️⃣  觉得这个概念很棒                 # 精选到 L3_引用素材
-5️⃣  下次写文章时直接调用             # 在 L4_原创文章 中创作
+3️⃣  文章按发布日期保存为 Markdown
+4️⃣  深度阅读，提炼要点               # 创建 L2_原子卡片
+5️⃣  觉得这个概念很棒                 # 精选到 L3_引用素材
+6️⃣  下次写文章时直接调用             # 在 L4_原创文章 中创作
 ```
 
 ## ⚙️ 配置
@@ -166,6 +186,8 @@ wechat-notebank import ./articles.xlsx
 | `wechat-notebank init` | 初始化知识库 |
 | `wechat-notebank fetch <url>` | 存档文章到默认知识库 |
 | `wechat-notebank fetch <url> --output <folder>` | 存档文章到指定文件夹 |
+| `wechat-notebank fetch <url> -o <folder>` | `--output` 的简写 |
+| `wechat-notebank import <Excel文件地址>` | 从 Excel 批量导入文章 |
 | `wechat-notebank --help` | 显示帮助 |
 
 ## 📄 文章元数据
