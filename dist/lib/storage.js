@@ -60,19 +60,31 @@ async function ensureDirectories(basePath) {
         await fs.ensureDir(dir);
     }
 }
-function generateFilename(title) {
-    const timestamp = Date.now();
+function generateFilename(title, pubDate) {
+    const datePrefix = /^\d{4}-\d{2}-\d{2}$/.test(pubDate)
+        ? pubDate
+        : new Date().toISOString().split('T')[0];
     const safeTitle = title
         .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')
         .slice(0, 20);
-    return `${timestamp}-${safeTitle || 'untitled'}.md`;
+    return `${datePrefix}-${safeTitle || 'untitled'}.md`;
 }
 async function saveArticle(archivePath, title, content, meta) {
     await fs.ensureDir(archivePath);
-    const filename = generateFilename(title);
-    const filePath = path.join(archivePath, filename);
+    const filename = generateFilename(title, meta.pubDate);
+    const filePath = await getAvailableFilePath(archivePath, filename);
     const fileContent = gray_matter_1.default.stringify(content, meta);
     await fs.writeFile(filePath, fileContent, 'utf-8');
+    return filePath;
+}
+async function getAvailableFilePath(archivePath, filename) {
+    const parsed = path.parse(filename);
+    let filePath = path.join(archivePath, filename);
+    let counter = 2;
+    while (await fs.pathExists(filePath)) {
+        filePath = path.join(archivePath, `${parsed.name}-${counter}${parsed.ext}`);
+        counter++;
+    }
     return filePath;
 }
 function getL1Path(basePath) {

@@ -22,12 +22,14 @@ export async function ensureDirectories(basePath: string): Promise<void> {
   }
 }
 
-export function generateFilename(title: string): string {
-  const timestamp = Date.now();
+export function generateFilename(title: string, pubDate: string): string {
+  const datePrefix = /^\d{4}-\d{2}-\d{2}$/.test(pubDate)
+    ? pubDate
+    : new Date().toISOString().split('T')[0];
   const safeTitle = title
     .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')
     .slice(0, 20);
-  return `${timestamp}-${safeTitle || 'untitled'}.md`;
+  return `${datePrefix}-${safeTitle || 'untitled'}.md`;
 }
 
 export async function saveArticle(
@@ -38,11 +40,24 @@ export async function saveArticle(
 ): Promise<string> {
   await fs.ensureDir(archivePath);
 
-  const filename = generateFilename(title);
-  const filePath = path.join(archivePath, filename);
+  const filename = generateFilename(title, meta.pubDate);
+  const filePath = await getAvailableFilePath(archivePath, filename);
 
   const fileContent = matter.stringify(content, meta);
   await fs.writeFile(filePath, fileContent, 'utf-8');
+
+  return filePath;
+}
+
+async function getAvailableFilePath(archivePath: string, filename: string): Promise<string> {
+  const parsed = path.parse(filename);
+  let filePath = path.join(archivePath, filename);
+  let counter = 2;
+
+  while (await fs.pathExists(filePath)) {
+    filePath = path.join(archivePath, `${parsed.name}-${counter}${parsed.ext}`);
+    counter++;
+  }
 
   return filePath;
 }
