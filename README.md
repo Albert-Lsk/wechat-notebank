@@ -94,6 +94,9 @@ YYYY-MM-DD-文章标题.md
 其中 `YYYY-MM-DD` 来自微信公众号文章的真实发布时间，不是抓取时间。若同名文件已存在，工具会自动追加 `-2`、`-3` 等序号，避免覆盖已有文件。
 
 ### 批量导入
+<img width="3024" height="1782" alt="dcaf7ffe60e5f993aeaa6cee32aba05f" src="https://github.com/user-attachments/assets/b3fd8420-709f-4f1a-aaed-4ade42823994" />
+
+<img width="3024" height="1758" alt="82821712d400a4ed91e33f49b986807f" src="https://github.com/user-attachments/assets/8bbb3f42-da7b-4bdd-8753-9c87d7ff8b47" />
 
 把文章表格整理成 Excel 文件，读取第一个工作表。推荐使用两列：
 
