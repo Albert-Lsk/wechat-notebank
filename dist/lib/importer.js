@@ -55,8 +55,13 @@ async function importWorkbook(filePath, archiveRow) {
             rowNumber: row.rowNumber,
         };
         try {
-            await archiveRow(importRow);
-            summary.success++;
+            const result = await archiveRow(importRow);
+            if (result?.status === 'skipped') {
+                summary.skipped++;
+            }
+            else {
+                summary.success++;
+            }
         }
         catch (error) {
             summary.failure++;

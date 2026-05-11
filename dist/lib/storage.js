@@ -40,6 +40,7 @@ exports.FOLDER_L4 = exports.FOLDER_L3 = exports.FOLDER_L2 = exports.FOLDER_L1 = 
 exports.ensureDirectories = ensureDirectories;
 exports.generateFilename = generateFilename;
 exports.saveArticle = saveArticle;
+exports.articleExistsBySourceUrl = articleExistsBySourceUrl;
 exports.getL1Path = getL1Path;
 const fs = __importStar(require("fs-extra"));
 const path = __importStar(require("path"));
@@ -76,6 +77,28 @@ async function saveArticle(archivePath, title, content, meta) {
     const fileContent = gray_matter_1.default.stringify(content, meta);
     await fs.writeFile(filePath, fileContent, 'utf-8');
     return filePath;
+}
+async function articleExistsBySourceUrl(archivePath, sourceUrl) {
+    if (!(await fs.pathExists(archivePath))) {
+        return false;
+    }
+    const entries = await fs.readdir(archivePath);
+    for (const entry of entries) {
+        if (path.extname(entry).toLowerCase() !== '.md') {
+            continue;
+        }
+        const filePath = path.join(archivePath, entry);
+        const stat = await fs.stat(filePath);
+        if (!stat.isFile()) {
+            continue;
+        }
+        const fileContent = await fs.readFile(filePath, 'utf-8');
+        const parsed = (0, gray_matter_1.default)(fileContent);
+        if (parsed.data?.sourceUrl === sourceUrl) {
+            return true;
+        }
+    }
+    return false;
 }
 async function getAvailableFilePath(archivePath, filename) {
     const parsed = path.parse(filename);

@@ -49,6 +49,36 @@ export async function saveArticle(
   return filePath;
 }
 
+export async function articleExistsBySourceUrl(
+  archivePath: string,
+  sourceUrl: string
+): Promise<boolean> {
+  if (!(await fs.pathExists(archivePath))) {
+    return false;
+  }
+
+  const entries = await fs.readdir(archivePath);
+  for (const entry of entries) {
+    if (path.extname(entry).toLowerCase() !== '.md') {
+      continue;
+    }
+
+    const filePath = path.join(archivePath, entry);
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) {
+      continue;
+    }
+
+    const fileContent = await fs.readFile(filePath, 'utf-8');
+    const parsed = matter(fileContent);
+    if (parsed.data?.sourceUrl === sourceUrl) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function getAvailableFilePath(archivePath: string, filename: string): Promise<string> {
   const parsed = path.parse(filename);
   let filePath = path.join(archivePath, filename);

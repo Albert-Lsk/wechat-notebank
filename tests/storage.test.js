@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { generateFilename, saveArticle } = require('../dist/lib/storage');
+const { articleExistsBySourceUrl, generateFilename, saveArticle } = require('../dist/lib/storage');
 
 (async () => {
   assert.strictEqual(
@@ -37,6 +37,20 @@ const { generateFilename, saveArticle } = require('../dist/lib/storage');
 
   assert.strictEqual(path.basename(duplicateFilePath), '2026-05-08-TestArticle-2.md');
   assert.ok(fs.existsSync(duplicateFilePath), 'duplicate article should not overwrite the first file');
+
+  assert.strictEqual(
+    await articleExistsBySourceUrl(archivePath, 'https://mp.weixin.qq.com/s/example'),
+    true
+  );
+  assert.strictEqual(
+    await articleExistsBySourceUrl(archivePath, 'https://mp.weixin.qq.com/s/missing'),
+    false
+  );
+  assert.strictEqual(
+    await articleExistsBySourceUrl(path.join(archivePath, 'missing-folder'), 'https://mp.weixin.qq.com/s/example'),
+    false
+  );
+
   console.log('storage tests passed');
 })().catch((error) => {
   console.error(error);

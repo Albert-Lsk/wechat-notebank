@@ -18,7 +18,12 @@ export interface ImportSummary {
   failures: ImportFailure[];
 }
 
-export type ArchiveRow = (row: ImportRow) => Promise<void>;
+export interface ArchiveRowResult {
+  status?: 'archived' | 'skipped';
+  message?: string;
+}
+
+export type ArchiveRow = (row: ImportRow) => Promise<void | ArchiveRowResult>;
 
 export async function importWorkbook(
   filePath: string,
@@ -46,8 +51,12 @@ export async function importWorkbook(
     };
 
     try {
-      await archiveRow(importRow);
-      summary.success++;
+      const result = await archiveRow(importRow);
+      if (result?.status === 'skipped') {
+        summary.skipped++;
+      } else {
+        summary.success++;
+      }
     } catch (error) {
       summary.failure++;
       summary.failures.push({

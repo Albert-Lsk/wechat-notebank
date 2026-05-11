@@ -3,9 +3,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.importCommand = importCommand;
 const fetch_1 = require("./fetch");
 const importer_1 = require("../lib/importer");
+const storage_1 = require("../lib/storage");
 async function importCommand(filePath) {
     console.log(`📚 正在导入 Excel: ${filePath}`);
     const summary = await (0, importer_1.importWorkbook)(filePath, async (row) => {
+        if (await (0, storage_1.articleExistsBySourceUrl)(row.outputPath, row.url)) {
+            console.log(`⏭️  [第 ${row.rowNumber} 行] 已存在，跳过: ${row.url}`);
+            return { status: 'skipped' };
+        }
         console.log(`\n📥 [第 ${row.rowNumber} 行] 正在获取文章: ${row.url}`);
         const result = await (0, fetch_1.archiveArticle)(row.url, row.outputPath);
         console.log(`✅ [第 ${row.rowNumber} 行] 已保存: ${result.filePath}`);

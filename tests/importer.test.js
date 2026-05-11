@@ -132,6 +132,38 @@ const { importWorkbook } = require('../dist/lib/importer');
     ],
   });
 
+  const skippedWorkbookPath = path.join(tempDir, 'articles-with-skip.xlsx');
+  const skippedWorkbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    skippedWorkbook,
+    XLSX.utils.aoa_to_sheet([
+      ['序号', '链接', '文件地址'],
+      [1, 'https://mp.weixin.qq.com/s/one', path.join(tempDir, 'one')],
+      [2, 'https://mp.weixin.qq.com/s/already-archived', path.join(tempDir, 'already')],
+    ]),
+    'Sheet1'
+  );
+  XLSX.writeFile(skippedWorkbook, skippedWorkbookPath);
+
+  const skippedArchivedRows = [];
+  const skippedSummary = await importWorkbook(skippedWorkbookPath, async (row) => {
+    skippedArchivedRows.push(row.url);
+    if (row.url.endsWith('/already-archived')) {
+      return { status: 'skipped', message: 'already archived' };
+    }
+  });
+
+  assert.deepStrictEqual(skippedArchivedRows, [
+    'https://mp.weixin.qq.com/s/one',
+    'https://mp.weixin.qq.com/s/already-archived',
+  ]);
+  assert.deepStrictEqual(skippedSummary, {
+    success: 1,
+    failure: 0,
+    skipped: 1,
+    failures: [],
+  });
+
   const commandWorkbookPath = path.join(tempDir, 'articles-command-failure.xlsx');
   const commandWorkbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
@@ -199,6 +231,83 @@ const { importWorkbook } = require('../dist/lib/importer');
           'fail'
         )}, 原因: network unavailable`
       )
+    )
+  );
+
+  const commandSkipWorkbookPath = path.join(tempDir, 'articles-command-skip.xlsx');
+  const commandSkipWorkbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    commandSkipWorkbook,
+    XLSX.utils.aoa_to_sheet([
+      ['序号', '链接', '文件地址'],
+      [1, 'https://mp.weixin.qq.com/s/existing', path.join(tempDir, 'existing')],
+      [2, 'https://mp.weixin.qq.com/s/new', path.join(tempDir, 'new')],
+    ]),
+    'Sheet1'
+  );
+  XLSX.writeFile(commandSkipWorkbook, commandSkipWorkbookPath);
+
+  const commandSkipFetchModulePath = require.resolve('../dist/commands/fetch');
+  const commandSkipStorageModulePath = require.resolve('../dist/lib/storage');
+  const commandSkipImportModulePath = require.resolve('../dist/commands/import');
+  const originalCommandSkipFetchModule = require.cache[commandSkipFetchModulePath];
+  const originalCommandSkipStorageModule = require.cache[commandSkipStorageModulePath];
+  const originalCommandSkipImportModule = require.cache[commandSkipImportModulePath];
+  delete require.cache[commandSkipImportModulePath];
+
+  const archivedCommandUrls = [];
+  require.cache[commandSkipFetchModulePath] = {
+    id: commandSkipFetchModulePath,
+    filename: commandSkipFetchModulePath,
+    loaded: true,
+    exports: {
+      archiveArticle: async (url, outputPath) => {
+        archivedCommandUrls.push(url);
+        return { filePath: path.join(outputPath, 'article.md') };
+      },
+    },
+  };
+  require.cache[commandSkipStorageModulePath] = {
+    id: commandSkipStorageModulePath,
+    filename: commandSkipStorageModulePath,
+    loaded: true,
+    exports: {
+      articleExistsBySourceUrl: async (_outputPath, url) => url.endsWith('/existing'),
+    },
+  };
+
+  const commandSkipLogs = [];
+  console.log = (...args) => {
+    commandSkipLogs.push(args.join(' '));
+  };
+
+  try {
+    const { importCommand } = require('../dist/commands/import');
+    await importCommand(commandSkipWorkbookPath);
+  } finally {
+    console.log = originalLog;
+    delete require.cache[commandSkipImportModulePath];
+    if (originalCommandSkipImportModule) {
+      require.cache[commandSkipImportModulePath] = originalCommandSkipImportModule;
+    }
+    if (originalCommandSkipFetchModule) {
+      require.cache[commandSkipFetchModulePath] = originalCommandSkipFetchModule;
+    } else {
+      delete require.cache[commandSkipFetchModulePath];
+    }
+    if (originalCommandSkipStorageModule) {
+      require.cache[commandSkipStorageModulePath] = originalCommandSkipStorageModule;
+    } else {
+      delete require.cache[commandSkipStorageModulePath];
+    }
+  }
+
+  assert.deepStrictEqual(archivedCommandUrls, ['https://mp.weixin.qq.com/s/new']);
+  assert(commandSkipLogs.includes('✅ 成功: 1'));
+  assert(commandSkipLogs.includes('⏭️  跳过: 1'));
+  assert(
+    commandSkipLogs.some((line) =>
+      line.includes('⏭️  [第 2 行] 已存在，跳过: https://mp.weixin.qq.com/s/existing')
     )
   );
 
