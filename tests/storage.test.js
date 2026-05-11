@@ -9,6 +9,10 @@ const { articleExistsBySourceUrl, generateFilename, saveArticle } = require('../
     generateFilename('Test Article', '2026-05-08'),
     '2026-05-08-TestArticle.md'
   );
+  assert.strictEqual(
+    generateFilename('4万Star开源神作曝光顶级AI们的System Prompt！太有意思了～', '2026-05-05'),
+    '2026-05-05-4万Star开源神作曝光顶级AI们的SystemPrompt太有意思了.md'
+  );
 
   const archivePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-')), 'nested', 'articles');
   const filePath = await saveArticle(archivePath, 'Test Article', 'Hello world', {

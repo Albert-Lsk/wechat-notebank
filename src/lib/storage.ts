@@ -3,6 +3,8 @@ import * as path from 'path';
 import matter from 'gray-matter';
 import { ArticleMeta } from '../types';
 
+const MAX_FILENAME_BYTES = 240;
+
 export const FOLDER_L1 = 'L1_原文';      // 公众号文章原文
 export const FOLDER_L2 = 'L2_原子卡片';  // 文章的原子想法卡片
 export const FOLDER_L3 = 'L3_引用素材';  // 可以直接引用的素材
@@ -27,9 +29,26 @@ export function generateFilename(title: string, pubDate: string): string {
     ? pubDate
     : new Date().toISOString().split('T')[0];
   const safeTitle = title
-    .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')
-    .slice(0, 20);
-  return `${datePrefix}-${safeTitle || 'untitled'}.md`;
+    .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '');
+  const filenamePrefix = `${datePrefix}-`;
+  const filenameExt = '.md';
+  const titleByteLimit = MAX_FILENAME_BYTES - Buffer.byteLength(filenamePrefix + filenameExt);
+  const safeTitleForFilename = truncateUtf8(safeTitle || 'untitled', titleByteLimit);
+
+  return `${filenamePrefix}${safeTitleForFilename}.md`;
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  let result = '';
+
+  for (const char of Array.from(value)) {
+    if (Buffer.byteLength(result + char) > maxBytes) {
+      break;
+    }
+    result += char;
+  }
+
+  return result;
 }
 
 export async function saveArticle(
