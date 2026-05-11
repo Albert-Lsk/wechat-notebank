@@ -48,11 +48,13 @@
 npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/heads/main.tar.gz
 ```
 
-`wechat-notebank` 还没有发布到 npm registry。发布后也可以使用：
+安装后推荐使用 `alskai-notebank` 命令。旧命令 `wechat-notebank` 仍然保留兼容。
+
+`wechat-notebank` 包还没有发布到 npm registry。发布后也可以使用：
 
 ```bash
 npm install -g wechat-notebank
-npx wechat-notebank <command>
+npx alskai-notebank <command>
 ```
 
 > 如果 `npm install -g wechat-notebank` 返回 `404 Not Found`，说明包还没有发布到 npm registry。
@@ -64,13 +66,13 @@ npx wechat-notebank <command>
 
 ```bash
 # 首次使用会自动引导，也可手动初始化
-wechat-notebank init
+alskai-notebank init
 ```
 
 ### 存档文章
 
 ```bash
-wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx
+alskai-notebank https://mp.weixin.qq.com/s/xxxxx
 ```
 
 如果没有指定输出目录，文章会保存到配置文件里的默认知识库路径。首次使用时，工具会自动引导你创建配置。
@@ -78,9 +80,9 @@ wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx
 也可以把单篇文章保存到指定文件夹：
 
 ```bash
-wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx --output ~/WeChatArticles
+alskai-notebank https://mp.weixin.qq.com/s/xxxxx --output ~/WeChatArticles
 # 或
-wechat-notebank fetch https://mp.weixin.qq.com/s/xxxxx -o ~/WeChatArticles
+alskai-notebank https://mp.weixin.qq.com/s/xxxxx -o ~/WeChatArticles
 ```
 
 如果目标文件夹不存在，工具会自动创建。
@@ -114,7 +116,7 @@ YYYY-MM-DD-文章标题.md
 然后运行：
 
 ```bash
-wechat-notebank import ./articles.xlsx
+alskai-notebank import ./articles.xlsx
 ```
 
 工具会按行读取表格，把每一行的文章保存到对应的文件夹。
@@ -162,8 +164,8 @@ wechat-notebank import ./articles.xlsx
 
 ```
 1️⃣  看到一篇好文章
-2️⃣  wechat-notebank fetch <url>     # 存入 L1_原文
-    或 wechat-notebank fetch <url> --output <文件夹地址>
+2️⃣  alskai-notebank <url>     # 存入 L1_原文
+    或 alskai-notebank <url> --output <文件夹地址>
 3️⃣  文章按发布日期保存为 Markdown
 4️⃣  深度阅读，提炼要点               # 创建 L2_原子卡片
 5️⃣  觉得这个概念很棒                 # 精选到 L3_引用素材
@@ -186,12 +188,19 @@ wechat-notebank import ./articles.xlsx
 
 | 命令 | 说明 |
 |------|------|
-| `wechat-notebank init` | 初始化知识库 |
-| `wechat-notebank fetch <url>` | 存档文章到默认知识库 |
-| `wechat-notebank fetch <url> --output <folder>` | 存档文章到指定文件夹 |
-| `wechat-notebank fetch <url> -o <folder>` | `--output` 的简写 |
-| `wechat-notebank import <Excel文件地址>` | 从 Excel 批量导入文章 |
-| `wechat-notebank --help` | 显示帮助 |
+| `alskai-notebank init` | 初始化知识库 |
+| `alskai-notebank <url>` | 存档文章到默认知识库 |
+| `alskai-notebank <url> --output <folder>` | 存档文章到指定文件夹 |
+| `alskai-notebank <url> -o <folder>` | `--output` 的简写 |
+| `alskai-notebank import <Excel文件地址>` | 从 Excel 批量导入文章 |
+| `alskai-notebank --help` | 显示帮助 |
+
+兼容旧命令：
+
+```bash
+wechat-notebank fetch <url> -o <folder>
+wechat-notebank import <Excel文件地址>
+```
 
 ## 📄 文章元数据
 

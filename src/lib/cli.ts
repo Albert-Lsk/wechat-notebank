@@ -7,6 +7,27 @@ export interface ImportArgs {
   filePath: string;
 }
 
+export interface NormalizedCliArgs {
+  command: string | undefined;
+  args: string[];
+}
+
+export function normalizeCliArgs(args: string[]): NormalizedCliArgs {
+  const [command, ...rest] = args;
+
+  if (looksLikeWechatArticleUrl(command)) {
+    return {
+      command: 'fetch',
+      args,
+    };
+  }
+
+  return {
+    command,
+    args: rest,
+  };
+}
+
 export function parseFetchArgs(args: string[]): FetchArgs {
   const [url, ...options] = args;
   let outputPath: string | undefined;
@@ -42,4 +63,8 @@ export function parseImportArgs(args: string[]): ImportArgs {
   }
 
   return { filePath };
+}
+
+function looksLikeWechatArticleUrl(value: string | undefined): boolean {
+  return /^https?:\/\/mp\.weixin\.qq\.com\/s\//.test(value || '');
 }

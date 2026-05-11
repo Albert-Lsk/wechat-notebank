@@ -1,5 +1,35 @@
 const assert = require('assert');
-const { parseFetchArgs, parseImportArgs } = require('../dist/lib/cli');
+const packageJson = require('../package.json');
+const { normalizeCliArgs, parseFetchArgs, parseImportArgs } = require('../dist/lib/cli');
+
+assert.deepStrictEqual(packageJson.bin, {
+  'alskai-notebank': 'dist/index.js',
+  'wechat-notebank': 'dist/index.js',
+});
+
+assert.deepStrictEqual(
+  normalizeCliArgs(['https://mp.weixin.qq.com/s/example', '-o', '/tmp/wechat-articles']),
+  {
+    command: 'fetch',
+    args: ['https://mp.weixin.qq.com/s/example', '-o', '/tmp/wechat-articles'],
+  }
+);
+
+assert.deepStrictEqual(
+  normalizeCliArgs(['fetch', 'https://mp.weixin.qq.com/s/example']),
+  {
+    command: 'fetch',
+    args: ['https://mp.weixin.qq.com/s/example'],
+  }
+);
+
+assert.deepStrictEqual(
+  normalizeCliArgs(['import', '/tmp/articles.xlsx']),
+  {
+    command: 'import',
+    args: ['/tmp/articles.xlsx'],
+  }
+);
 
 assert.deepStrictEqual(
   parseFetchArgs(['https://mp.weixin.qq.com/s/example']),

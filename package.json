@@ -4,6 +4,7 @@
   "description": "Archive WeChat public account articles to Markdown with Progressive Summarization",
   "main": "dist/index.js",
   "bin": {
+    "alskai-notebank": "dist/index.js",
     "wechat-notebank": "dist/index.js"
   },
   "files": [
