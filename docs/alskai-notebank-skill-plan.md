@@ -1,10 +1,17 @@
-# alskai-notebank Codex Skill Plan
+# alskai-notebank Skill Implementation Notes
 
 ## Goal
 
-Package `alskai-notebank` as a Codex skill so users can ask Codex to archive WeChat articles without remembering the terminal workflow.
+Package `alskai-notebank` as a Claude Code / Codex skill so users can ask an agent to archive WeChat articles without remembering the terminal workflow.
 
 The skill should call the local CLI. It should not reimplement article fetching, parsing, routing, or Excel import logic.
+
+## Implemented Files
+
+- `skills/alskai-notebank/SKILL.md`: shared skill instructions.
+- `skills/alskai-notebank/agents/openai.yaml`: Codex UI metadata.
+- `.claude/commands/alskai-notebank.md`: Claude Code slash command.
+- `scripts/install-skills.sh`: installer for Claude Code and Codex local skill directories.
 
 ## User-Facing Commands
 
@@ -36,7 +43,7 @@ alskai-notebank import <Excel文件地址>
 - Do not guess target folders unless a future auto-route feature is explicitly enabled.
 - Do not perform likes, favorites, or other WeChat account interactions.
 
-## Draft SKILL.md
+## Installed Skill Shape
 
 ````markdown
 ---

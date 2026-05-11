@@ -1,0 +1,3 @@
+interface:
+  display_name: "alskai-notebank"
+  short_description: "Archive WeChat articles into a local Markdown or Obsidian knowledge base."

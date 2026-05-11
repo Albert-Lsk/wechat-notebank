@@ -9,6 +9,10 @@
   },
   "files": [
     "dist",
+    "docs",
+    "skills",
+    ".claude/commands",
+    "scripts/install-skills.sh",
     "README.md",
     "LICENSE"
   ],

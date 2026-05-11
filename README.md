@@ -62,6 +62,35 @@ npx alskai-notebank <command>
 
 工具会调用本机已安装的 Chrome 抓取微信公众号文章。如果你的 Chrome 不在默认路径，可设置 `WECHAT_NOTEBANK_CHROME_PATH` 指向 Chrome 可执行文件。
 
+### Claude Code / Codex Skill 安装
+
+先安装 CLI，再安装 skill。
+
+如果你是在项目仓库里：
+
+```bash
+bash scripts/install-skills.sh
+```
+
+如果你是通过全局 npm 包安装的：
+
+```bash
+npm explore -g wechat-notebank -- bash scripts/install-skills.sh
+```
+
+安装脚本会把 `alskai-notebank` skill 安装到本机常见的 Claude Code / Codex skill 目录，并安装 Claude Code slash command。
+
+安装后重启 Claude Code 或 Codex，让新 skill 被重新发现。
+
+Claude Code 里可以这样用：
+
+```text
+/alskai-notebank https://mp.weixin.qq.com/s/xxxxx -o ~/WeChatArticles
+/alskai-notebank import ./articles.xlsx
+```
+
+Codex 里可以通过提到 `alskai-notebank` skill 或用自然语言触发同样的流程。skill 只负责调用本地 CLI，不会重新实现抓取逻辑。
+
 ### 初始化
 
 ```bash
