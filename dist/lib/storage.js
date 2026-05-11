@@ -49,7 +49,7 @@ const MAX_FILENAME_BYTES = 240;
 exports.FOLDER_L1 = 'L1_原文'; // 公众号文章原文
 exports.FOLDER_L2 = 'L2_原子卡片'; // 文章的原子想法卡片
 exports.FOLDER_L3 = 'L3_引用素材'; // 可以直接引用的素材
-exports.FOLDER_L4 = 'L4_原创文章'; // 根据 L3 素材重新写的文章
+exports.FOLDER_L4 = 'L4_阅读复盘'; // 保留出处，记录自己的理解
 async function ensureDirectories(basePath) {
     const dirs = [
         basePath,
