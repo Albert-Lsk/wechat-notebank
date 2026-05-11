@@ -90,10 +90,11 @@ function readImportRows(filePath) {
         values: [row[0], row[1], row[2]].map(cellToString),
         rowNumber: index + 1,
     }));
-    if (rows[0] && isHeaderRow(rows[0].values)) {
-        return rows.slice(1);
-    }
-    return rows;
+    const layout = detectColumnLayout(rows[0]?.values || []);
+    const dataRows = rows[0] && isHeaderRow(rows[0].values)
+        ? rows.slice(1)
+        : rows;
+    return dataRows.map((row) => normalizeImportRow(row, layout));
 }
 function cellToString(value) {
     if (value === null || value === undefined) {
@@ -101,13 +102,47 @@ function cellToString(value) {
     }
     return String(value).trim();
 }
+function detectColumnLayout(values) {
+    if (isUrlOutputHeaderRow(values) || looksLikeWechatArticleUrl(values[0])) {
+        return {
+            sequenceIndex: null,
+            urlIndex: 0,
+            outputPathIndex: 1,
+        };
+    }
+    return {
+        sequenceIndex: 0,
+        urlIndex: 1,
+        outputPathIndex: 2,
+    };
+}
+function normalizeImportRow(row, layout) {
+    return {
+        rowNumber: row.rowNumber,
+        values: [
+            layout.sequenceIndex === null ? '' : row.values[layout.sequenceIndex],
+            row.values[layout.urlIndex],
+            row.values[layout.outputPathIndex],
+        ],
+    };
+}
 function isHeaderRow(values) {
+    return isLegacyHeaderRow(values) || isUrlOutputHeaderRow(values);
+}
+function isLegacyHeaderRow(values) {
     return (values[0] === '序号' &&
         /链接|文章/.test(values[1]) &&
         /文件|目标|地址|路径/.test(values[2]));
 }
+function isUrlOutputHeaderRow(values) {
+    return (/链接|文章/.test(values[0]) &&
+        /文件|目标|地址|路径/.test(values[1]));
+}
+function looksLikeWechatArticleUrl(value) {
+    return /^https?:\/\/mp\.weixin\.qq\.com\/s\//.test(value);
+}
 function isCompleteRow(values) {
-    return values.every((value) => value.length > 0);
+    return values[1].length > 0 && values[2].length > 0;
 }
 function getErrorMessage(error) {
     if (error instanceof Error) {

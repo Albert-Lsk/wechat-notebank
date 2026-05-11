@@ -95,12 +95,18 @@ YYYY-MM-DD-文章标题.md
 
 ### 批量导入
 
-把文章表格整理成 Excel 文件，读取第一个工作表。前三列分别是：
+把文章表格整理成 Excel 文件，读取第一个工作表。推荐使用两列：
 
-| 序号 | 链接 | 文件地址 |
-|------|------|----------|
+| 微信文章 | 目标地址 |
+|----------|----------|
+| `https://mp.weixin.qq.com/s/xxxxx` | `~/WeChatArticles` |
+| `https://mp.weixin.qq.com/s/yyyyy` | `/Users/you/Documents/AI-Bloggers` |
+
+旧版三列表格也仍然兼容：
+
+| 序号 | 微信文章 | 目标地址 |
+|------|----------|----------|
 | 1 | `https://mp.weixin.qq.com/s/xxxxx` | `~/WeChatArticles` |
-| 2 | `https://mp.weixin.qq.com/s/yyyyy` | `/Users/you/Documents/AI-Bloggers` |
 
 然后运行：
 
@@ -110,8 +116,9 @@ wechat-notebank import ./articles.xlsx
 
 工具会按行读取表格，把每一行的文章保存到对应的文件夹。
 
-- 第一行可以是表头，表头形如 `序号 / 链接 / 文件地址` 时会自动跳过。
-- 任意一行缺少序号、链接或文件地址时，会跳过这一行。
+- 第一行可以是表头，表头形如 `微信文章 / 目标地址` 或 `序号 / 微信文章 / 目标地址` 时会自动跳过。
+- 序号列已废弃，不再需要填写。
+- 任意一行缺少微信文章链接或目标地址时，会跳过这一行。
 - 如果目标文件夹里已经有相同 `sourceUrl` 的文章，会跳过，不会重复抓取或生成 `-2.md`。
 - 某一行抓取失败不会中断后续行，导入结束后会输出失败明细。
 - Numbers 表格请先导出为 Excel（`.xlsx`）后再导入。

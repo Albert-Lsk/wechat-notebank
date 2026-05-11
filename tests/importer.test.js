@@ -82,6 +82,54 @@ const { importWorkbook } = require('../dist/lib/importer');
     failures: [],
   });
 
+  const noSequenceWorkbookPath = path.join(tempDir, 'articles-without-sequence.xlsx');
+  const noSequenceWorkbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    noSequenceWorkbook,
+    XLSX.utils.aoa_to_sheet([
+      ['微信文章', '目标地址'],
+      ['https://mp.weixin.qq.com/s/no-sequence-one', path.join(tempDir, 'no-sequence-one')],
+      ['', path.join(tempDir, 'missing-link-no-sequence')],
+      ['https://mp.weixin.qq.com/s/no-sequence-two', path.join(tempDir, 'no-sequence-two')],
+    ]),
+    'Sheet1'
+  );
+  XLSX.writeFile(noSequenceWorkbook, noSequenceWorkbookPath);
+
+  const noSequenceRows = [];
+  const noSequenceSummary = await importWorkbook(noSequenceWorkbookPath, async (row) => {
+    noSequenceRows.push(row);
+  });
+
+  assert.deepStrictEqual(
+    noSequenceRows.map((row) => ({
+      sequence: row.sequence,
+      url: row.url,
+      outputPath: row.outputPath,
+      rowNumber: row.rowNumber,
+    })),
+    [
+      {
+        sequence: '',
+        url: 'https://mp.weixin.qq.com/s/no-sequence-one',
+        outputPath: path.join(tempDir, 'no-sequence-one'),
+        rowNumber: 2,
+      },
+      {
+        sequence: '',
+        url: 'https://mp.weixin.qq.com/s/no-sequence-two',
+        outputPath: path.join(tempDir, 'no-sequence-two'),
+        rowNumber: 4,
+      },
+    ]
+  );
+  assert.deepStrictEqual(noSequenceSummary, {
+    success: 2,
+    failure: 0,
+    skipped: 1,
+    failures: [],
+  });
+
   const failureWorkbookPath = path.join(tempDir, 'articles-with-failure.xlsx');
   const failureWorkbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(

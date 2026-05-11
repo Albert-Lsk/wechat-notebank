@@ -25,6 +25,17 @@ export interface ArchiveRowResult {
 
 export type ArchiveRow = (row: ImportRow) => Promise<void | ArchiveRowResult>;
 
+interface RawImportRow {
+  values: string[];
+  rowNumber: number;
+}
+
+interface ImportColumnLayout {
+  sequenceIndex: number | null;
+  urlIndex: number;
+  outputPathIndex: number;
+}
+
 export async function importWorkbook(
   filePath: string,
   archiveRow: ArchiveRow
@@ -69,7 +80,7 @@ export async function importWorkbook(
   return summary;
 }
 
-function readImportRows(filePath: string): Array<{ values: string[]; rowNumber: number }> {
+function readImportRows(filePath: string): RawImportRow[] {
   const workbook = XLSX.readFile(filePath);
   const firstSheetName = workbook.SheetNames[0];
   if (!firstSheetName) {
@@ -84,16 +95,17 @@ function readImportRows(filePath: string): Array<{ values: string[]; rowNumber: 
     blankrows: false,
   });
 
-  const rows = rawRows.map((row, index) => ({
+  const rows: RawImportRow[] = rawRows.map((row, index) => ({
     values: [row[0], row[1], row[2]].map(cellToString),
     rowNumber: index + 1,
   }));
 
-  if (rows[0] && isHeaderRow(rows[0].values)) {
-    return rows.slice(1);
-  }
+  const layout = detectColumnLayout(rows[0]?.values || []);
+  const dataRows = rows[0] && isHeaderRow(rows[0].values)
+    ? rows.slice(1)
+    : rows;
 
-  return rows;
+  return dataRows.map((row) => normalizeImportRow(row, layout));
 }
 
 function cellToString(value: unknown): string {
@@ -104,7 +116,38 @@ function cellToString(value: unknown): string {
   return String(value).trim();
 }
 
+function detectColumnLayout(values: string[]): ImportColumnLayout {
+  if (isUrlOutputHeaderRow(values) || looksLikeWechatArticleUrl(values[0])) {
+    return {
+      sequenceIndex: null,
+      urlIndex: 0,
+      outputPathIndex: 1,
+    };
+  }
+
+  return {
+    sequenceIndex: 0,
+    urlIndex: 1,
+    outputPathIndex: 2,
+  };
+}
+
+function normalizeImportRow(row: RawImportRow, layout: ImportColumnLayout): RawImportRow {
+  return {
+    rowNumber: row.rowNumber,
+    values: [
+      layout.sequenceIndex === null ? '' : row.values[layout.sequenceIndex],
+      row.values[layout.urlIndex],
+      row.values[layout.outputPathIndex],
+    ],
+  };
+}
+
 function isHeaderRow(values: string[]): boolean {
+  return isLegacyHeaderRow(values) || isUrlOutputHeaderRow(values);
+}
+
+function isLegacyHeaderRow(values: string[]): boolean {
   return (
     values[0] === '序号' &&
     /链接|文章/.test(values[1]) &&
@@ -112,8 +155,19 @@ function isHeaderRow(values: string[]): boolean {
   );
 }
 
+function isUrlOutputHeaderRow(values: string[]): boolean {
+  return (
+    /链接|文章/.test(values[0]) &&
+    /文件|目标|地址|路径/.test(values[1])
+  );
+}
+
+function looksLikeWechatArticleUrl(value: string): boolean {
+  return /^https?:\/\/mp\.weixin\.qq\.com\/s\//.test(value);
+}
+
 function isCompleteRow(values: string[]): boolean {
-  return values.every((value) => value.length > 0);
+  return values[1].length > 0 && values[2].length > 0;
 }
 
 function getErrorMessage(error: unknown): string {
