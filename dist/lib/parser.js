@@ -170,8 +170,74 @@ function cleanHtml(html) {
         }
         $img.removeAttr('data-src');
     });
+    normalizeCodeBlocks($);
     // 保留段落和基本格式
     return $.html();
+}
+function normalizeCodeBlocks($) {
+    $('.code-snippet__fix').each((_, snippet) => {
+        const $snippet = $(snippet);
+        const $pre = $snippet.is('pre') ? $snippet : $snippet.find('pre').first();
+        if (!$pre.length) {
+            return;
+        }
+        $snippet.replaceWith(createCleanCodeBlock($, $pre));
+    });
+    $('pre').each((_, pre) => {
+        const $pre = $(pre);
+        if (isCleanCodeBlock($pre)) {
+            return;
+        }
+        $pre.replaceWith(createCleanCodeBlock($, $pre));
+    });
+}
+function isCleanCodeBlock($pre) {
+    const attrs = $pre.attr() || {};
+    const $code = $pre.children('code');
+    return Object.keys(attrs).length === 0 && $code.length === 1 && $code.children().length === 0;
+}
+function createCleanCodeBlock($, $pre) {
+    const language = extractCodeLanguage($pre);
+    const $cleanPre = $('<pre></pre>');
+    const $cleanCode = $('<code></code>');
+    if (language) {
+        $cleanCode.attr('class', `language-${language}`);
+    }
+    $cleanCode.text(extractCodeText($, $pre));
+    $cleanPre.append($cleanCode);
+    return $cleanPre;
+}
+function extractCodeText($, $pre) {
+    const $codeLines = $pre.children('code');
+    const rawText = $codeLines.length > 1
+        ? $codeLines
+            .toArray()
+            .map((code) => $(code).text())
+            .join('\n')
+        : $pre.text();
+    return normalizeCodeText(rawText);
+}
+function normalizeCodeText(text) {
+    return text
+        .replace(/\r\n?/g, '\n')
+        .replace(/\u00a0/g, ' ')
+        .replace(/^\n+/, '')
+        .replace(/\n+$/, '');
+}
+function extractCodeLanguage($pre) {
+    const dataLang = sanitizeCodeLanguage($pre.attr('data-lang') || '');
+    if (dataLang) {
+        return dataLang;
+    }
+    const className = $pre.attr('class') || '';
+    const classLang = className.match(/\b(?:language-|code-snippet__)([a-zA-Z0-9_+-]+)/);
+    return sanitizeCodeLanguage(classLang?.[1] || '');
+}
+function sanitizeCodeLanguage(language) {
+    return language
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_+-]/g, '');
 }
 function normalizeDate(dateStr) {
     if (!dateStr)
