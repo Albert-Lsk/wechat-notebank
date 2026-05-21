@@ -2,6 +2,18 @@ import * as cheerio from 'cheerio';
 import puppeteer, { LaunchOptions } from 'puppeteer-core';
 import { ParseResult, ArticleMeta } from '../types';
 
+const DEFAULT_NAVIGATION_TIMEOUT_MS = 60000;
+const DEFAULT_CONTENT_TIMEOUT_MS = 30000;
+
+interface ArticleBrowserPage {
+  goto(
+    url: string,
+    options: { waitUntil: 'domcontentloaded'; timeout: number }
+  ): Promise<unknown>;
+  waitForSelector(selector: string, options: { timeout: number }): Promise<unknown>;
+  content(): Promise<string>;
+}
+
 /**
  * 使用 Puppeteer 获取微信公众号文章 HTML
  * 微信公众号有较强的反爬机制，需要使用无头浏览器
@@ -39,24 +51,56 @@ export async function fetchArticleHtml(url: string): Promise<string> {
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
     });
 
-    // 访问页面
-    await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 30000,
-    });
-
-    // 等待文章内容加载
-    await page.waitForSelector('#js_content', { timeout: 10000 }).catch(() => {
-      // 可能已经加载，忽略超时
-    });
-
-    // 获取渲染后的 HTML
-    const html = await page.content();
-
-    return html;
+    return await fetchArticleHtmlFromPage(page, url);
   } finally {
     await browser.close();
   }
+}
+
+export async function fetchArticleHtmlFromPage(
+  page: ArticleBrowserPage,
+  url: string
+): Promise<string> {
+  try {
+    await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: readPositiveIntegerEnv(
+        'WECHAT_NOTEBANK_NAVIGATION_TIMEOUT_MS',
+        DEFAULT_NAVIGATION_TIMEOUT_MS
+      ),
+    });
+  } catch (error) {
+    if (!isNavigationTimeoutError(error)) {
+      throw error;
+    }
+  }
+
+  // 微信文章的图片和统计请求可能很久不结束；正文出现后即可解析。
+  await page.waitForSelector('#js_content', {
+    timeout: readPositiveIntegerEnv('WECHAT_NOTEBANK_CONTENT_TIMEOUT_MS', DEFAULT_CONTENT_TIMEOUT_MS),
+  }).catch(() => {
+    // 继续返回页面内容，让解析层给出统一的文章结构错误。
+  });
+
+  return await page.content();
+}
+
+function isNavigationTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.name === 'TimeoutError' || /Navigation timeout/i.test(error.message);
+}
+
+function readPositiveIntegerEnv(name: string, fallback: number): number {
+  const value = process.env[name];
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 /**

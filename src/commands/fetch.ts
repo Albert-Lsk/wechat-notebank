@@ -2,6 +2,8 @@ import { fetchArticleHtml, parseWechatArticle, buildMeta } from '../lib/parser';
 import { saveArticle } from '../lib/storage';
 import { readConfig } from '../lib/config';
 import { ArticleMeta, WechatNotebankConfig } from '../types';
+import * as os from 'os';
+import * as path from 'path';
 
 export interface ArchiveArticleResult {
   filePath: string;
@@ -65,12 +67,24 @@ export function resolveArchivePath(
   outputPath?: string
 ): string {
   if (outputPath) {
-    return outputPath;
+    return expandHomePath(outputPath);
   }
 
   if (!config) {
     throw new Error('未找到配置文件，请先运行 wechat-notebank init，或使用 --output <folder> 指定保存目录');
   }
 
-  return config.archivePath;
+  return expandHomePath(config.archivePath);
+}
+
+function expandHomePath(archivePath: string): string {
+  if (archivePath === '~') {
+    return os.homedir();
+  }
+
+  if (/^~[\\/]/.test(archivePath)) {
+    return path.join(os.homedir(), archivePath.slice(2));
+  }
+
+  return archivePath;
 }

@@ -16,6 +16,26 @@
 - 🔄 **零门槛上手**，首次使用自动引导配置
 - 🌱 **个人阅读档案**，让好文章可检索、可复盘、可追溯出处
 
+## ⚠️ 免责声明与附加条款 · Personal Learning Only
+
+本项目仅供个人学习、研究和资料归档使用。使用者应确保自己对所访问、下载、保存和处理的内容拥有合法访问权限，并遵守相关法律法规、平台规则与原作者版权声明。
+
+使用本工具时，严禁用于以下场景：
+
+- 未经授权访问、获取、解析、保存或传播他人账号、隐私、数据或非公开内容
+- 绕过访问控制、登录限制、风控机制、反爬策略或任何安全保护措施
+- 以商业目的进行批量采集、复制、转售、分发、搬运或建立内容库
+- 对他人进行监控、追踪、画像、骚扰或其他侵害合法权益的行为
+- 违反适用法律法规、监管要求、平台用户协议或第三方权利的任何行为
+
+通过本工具保存的微信公众号文章及其图片、音视频、排版、评论、阅读数据等内容，其版权和相关权益归原作者、发布者或相应权利人所有。本项目不会改变任何第三方内容的权属关系，也不授予使用者对第三方内容的再发布、改编、商用或传播权利。
+
+本工具按“现状”提供，不提供任何明示或暗示担保。因安装、运行、使用、二次开发或分发本项目而产生的任何风险、损失、争议或法律责任，均由使用者自行承担。项目维护者不对使用者的具体使用行为及其后果承担责任。
+
+本项目与微信、WeChat、腾讯、公众号平台及其他第三方平台不存在任何从属、合作、授权或背书关系。所有商标、产品名称、服务名称均归其各自权利人所有。
+
+一旦下载、安装、运行或使用本项目，即视为已阅读、理解并同意上述声明与附加条款。若不同意，请立即停止使用并删除本项目及其相关副本。
+
 ## 🎯 痛点
 
 ```
@@ -62,6 +82,18 @@ npx alskai-notebank <command>
 
 工具会调用本机已安装的 Chrome 抓取微信公众号文章。如果你的 Chrome 不在默认路径，可设置 `WECHAT_NOTEBANK_CHROME_PATH` 指向 Chrome 可执行文件。
 
+Windows PowerShell 示例：
+
+```powershell
+$env:WECHAT_NOTEBANK_CHROME_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe"
+```
+
+Windows cmd 示例：
+
+```bat
+set WECHAT_NOTEBANK_CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
+```
+
 ### Claude Code / Codex Skill 安装
 
 先安装 CLI，再安装 skill。
@@ -79,6 +111,16 @@ npm explore -g wechat-notebank -- bash scripts/install-skills.sh
 ```
 
 安装脚本会把 `alskai-notebank` skill 安装到本机常见的 Claude Code / Codex skill 目录，并安装 Claude Code slash command。
+
+可以用下面的命令确认是否安装成功：
+
+```bash
+ls ~/.claude/skills/alskai-notebank
+ls ~/.codex/skills/alskai-notebank
+ls ~/.claude/commands/alskai-notebank.md
+```
+
+如果能看到对应文件或目录，说明 skill 已经安装到本机。
 
 安装后重启 Claude Code 或 Codex，让新 skill 被重新发现。
 
@@ -102,6 +144,8 @@ alskai-notebank init
 
 ```bash
 alskai-notebank https://mp.weixin.qq.com/s/xxxxx
+# 也兼容显式 fetch 子命令
+alskai-notebank fetch https://mp.weixin.qq.com/s/xxxxx
 ```
 
 如果没有指定输出目录，文章会保存到配置文件里的默认知识库路径。首次使用时，工具会自动引导你创建配置。
@@ -113,6 +157,20 @@ alskai-notebank https://mp.weixin.qq.com/s/xxxxx --output ~/WeChatArticles
 # 或
 alskai-notebank https://mp.weixin.qq.com/s/xxxxx -o ~/WeChatArticles
 ```
+
+Windows PowerShell 推荐写法：
+
+```powershell
+alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "$HOME\WeChatArticles"
+```
+
+Windows cmd 推荐写法：
+
+```bat
+alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%\WeChatArticles"
+```
+
+`~/WeChatArticles` 和 `~\WeChatArticles` 也会被工具识别为当前用户的 home 目录。
 
 如果目标文件夹不存在，工具会自动创建。
 
@@ -219,6 +277,7 @@ alskai-notebank import ./articles.xlsx
 |------|------|
 | `alskai-notebank init` | 初始化知识库 |
 | `alskai-notebank <url>` | 存档文章到默认知识库 |
+| `alskai-notebank fetch <url>` | 显式存档文章，和 `alskai-notebank <url>` 等价 |
 | `alskai-notebank <url> --output <folder>` | 存档文章到指定文件夹 |
 | `alskai-notebank <url> -o <folder>` | `--output` 的简写 |
 | `alskai-notebank import <Excel文件地址>` | 从 Excel 批量导入文章 |
@@ -230,6 +289,36 @@ alskai-notebank import ./articles.xlsx
 wechat-notebank fetch <url> -o <folder>
 wechat-notebank import <Excel文件地址>
 ```
+
+## 🧯 常见问题
+
+### `Navigation timeout of 30000 ms exceeded`
+
+这个错误通常表示 Chrome 打开微信文章时，页面里的图片、统计请求或微信风控页面迟迟没有结束加载。它一般不是输出目录问题。
+
+可以按顺序排查：
+
+1. 先在本机 Chrome 里手动打开这篇文章，确认不是失效链接、登录页、验证码或“微信公众平台”空壳页。
+2. 升级到最新版 `wechat-notebank` 后重试，新版会优先等正文出现，而不是等所有网络请求结束。
+3. 网络较慢时，可以临时调大等待时间。
+
+PowerShell：
+
+```powershell
+$env:WECHAT_NOTEBANK_NAVIGATION_TIMEOUT_MS="90000"
+$env:WECHAT_NOTEBANK_CONTENT_TIMEOUT_MS="45000"
+alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "$HOME\WeChatArticles"
+```
+
+cmd：
+
+```bat
+set WECHAT_NOTEBANK_NAVIGATION_TIMEOUT_MS=90000
+set WECHAT_NOTEBANK_CONTENT_TIMEOUT_MS=45000
+alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%\WeChatArticles"
+```
+
+如果仍然失败，把完整命令、错误信息、系统版本、Chrome 版本和文章链接一起反馈到 GitHub issue。
 
 ## 📄 文章元数据
 

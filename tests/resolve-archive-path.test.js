@@ -1,4 +1,6 @@
 const assert = require('assert');
+const os = require('os');
+const path = require('path');
 const { resolveArchivePath } = require('../dist/commands/fetch');
 
 assert.strictEqual(
@@ -14,6 +16,16 @@ assert.strictEqual(
 assert.strictEqual(
   resolveArchivePath(null, '/custom/path'),
   '/custom/path'
+);
+
+assert.strictEqual(
+  resolveArchivePath(null, '~/WeChatArticles'),
+  path.join(os.homedir(), 'WeChatArticles')
+);
+
+assert.strictEqual(
+  resolveArchivePath(null, '~\\WeChatArticles'),
+  path.join(os.homedir(), 'WeChatArticles')
 );
 
 assert.throws(
