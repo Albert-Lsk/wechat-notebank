@@ -42,6 +42,7 @@ exports.parseWechatArticle = parseWechatArticle;
 exports.buildMeta = buildMeta;
 const cheerio = __importStar(require("cheerio"));
 const puppeteer_core_1 = __importDefault(require("puppeteer-core"));
+const url_1 = require("./url");
 const DEFAULT_NAVIGATION_TIMEOUT_MS = 60000;
 const DEFAULT_CONTENT_TIMEOUT_MS = 30000;
 /**
@@ -49,14 +50,15 @@ const DEFAULT_CONTENT_TIMEOUT_MS = 30000;
  * 微信公众号有较强的反爬机制，需要使用无头浏览器
  */
 async function fetchArticleHtml(url) {
+    (0, url_1.assertSafeArticleUrl)(url);
     const launchOptions = {
         headless: true,
         args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--disable-accelerated-2d-canvas',
             '--disable-gpu',
+            // 仅在 root / 容器等无法使用沙箱的环境才关闭 Chrome 沙箱。
+            ...(shouldDisableSandbox() ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
         ],
     };
     if (process.env.WECHAT_NOTEBANK_CHROME_PATH) {
@@ -99,6 +101,16 @@ async function fetchArticleHtmlFromPage(page, url) {
         // 继续返回页面内容，让解析层给出统一的文章结构错误。
     });
     return await page.content();
+}
+/**
+ * 默认保留 Chrome 沙箱。仅当显式 opt-in，或以 root 身份运行
+ * （沙箱无法在 root 下启动）时才关闭。
+ */
+function shouldDisableSandbox() {
+    if (process.env.WECHAT_NOTEBANK_NO_SANDBOX === '1') {
+        return true;
+    }
+    return typeof process.getuid === 'function' && process.getuid() === 0;
 }
 function isNavigationTimeoutError(error) {
     if (!(error instanceof Error)) {

@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import puppeteer, { LaunchOptions } from 'puppeteer-core';
 import { ParseResult, ArticleMeta } from '../types';
+import { assertSafeArticleUrl } from './url';
 
 const DEFAULT_NAVIGATION_TIMEOUT_MS = 60000;
 const DEFAULT_CONTENT_TIMEOUT_MS = 30000;
@@ -19,14 +20,16 @@ interface ArticleBrowserPage {
  * 微信公众号有较强的反爬机制，需要使用无头浏览器
  */
 export async function fetchArticleHtml(url: string): Promise<string> {
+  assertSafeArticleUrl(url);
+
   const launchOptions: LaunchOptions = {
     headless: true,
     args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-accelerated-2d-canvas',
       '--disable-gpu',
+      // 仅在 root / 容器等无法使用沙箱的环境才关闭 Chrome 沙箱。
+      ...(shouldDisableSandbox() ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
     ],
   };
 
@@ -83,6 +86,18 @@ export async function fetchArticleHtmlFromPage(
   });
 
   return await page.content();
+}
+
+/**
+ * 默认保留 Chrome 沙箱。仅当显式 opt-in，或以 root 身份运行
+ * （沙箱无法在 root 下启动）时才关闭。
+ */
+function shouldDisableSandbox(): boolean {
+  if (process.env.WECHAT_NOTEBANK_NO_SANDBOX === '1') {
+    return true;
+  }
+
+  return typeof process.getuid === 'function' && process.getuid() === 0;
 }
 
 function isNavigationTimeoutError(error: unknown): boolean {

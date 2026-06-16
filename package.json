@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node tests/fetch-args.test.js && node tests/resolve-archive-path.test.js && node tests/storage.test.js && node tests/importer.test.js && node tests/parser.test.js && node tests/fetch-html.test.js",
+    "test": "npm run build && node tests/fetch-args.test.js && node tests/resolve-archive-path.test.js && node tests/storage.test.js && node tests/importer.test.js && node tests/parser.test.js && node tests/fetch-html.test.js && node tests/url.test.js",
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js"
   },
@@ -38,13 +38,12 @@
   "homepage": "https://github.com/Albert-Lsk/wechat-notebank#readme",
   "license": "MIT",
   "dependencies": {
-    "axios": "^1.6.5",
     "cheerio": "^1.0.0",
     "fs-extra": "^11.2.0",
     "gray-matter": "^4.0.3",
     "inquirer": "^8.2.5",
     "puppeteer-core": "^24.43.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
