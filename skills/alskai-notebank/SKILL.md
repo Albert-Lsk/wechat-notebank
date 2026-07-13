@@ -1,6 +1,6 @@
 ---
 name: alskai-notebank
-description: Use when the user wants to archive WeChat public account articles into a local Markdown or Obsidian knowledge base with alskai-notebank, including single article URLs, output folders, Excel or Numbers batch imports, and /alskai-notebank-style requests.
+description: Use when the user wants to save, archive, back up, download, export, or migrate WeChat public account (微信公众号) articles; convert WeChat articles to Markdown; move WeChat links into Obsidian, Logseq, a local folder, or a personal knowledge base; batch import article URLs from Excel or Numbers; or keep valuable WeChat content from becoming lost or unsearchable.
 ---
 
 # alskai-notebank
@@ -13,7 +13,16 @@ Use the local `alskai-notebank` CLI as the source of truth. Do not reimplement a
 - `/alskai-notebank <WeChat article URL> --output <folder>`
 - `/alskai-notebank import <Excel file>`
 - `/alskai-notebank import <Numbers file>`
-- Natural-language requests to archive one or many WeChat public account articles with `alskai-notebank`.
+- Natural-language requests to save or migrate one or many WeChat public account articles, even when the user does not name `alskai-notebank`.
+
+## Intent Mapping
+
+Map the user's desired outcome to the CLI even when they do not name the tool:
+
+- Saving, backing up, exporting, or archiving one WeChat article -> single-article command.
+- Moving WeChat articles into Obsidian, Logseq, Markdown, a local folder, or a personal knowledge base -> single-article command for one URL, import for a workbook.
+- Preserving articles before links disappear or become hard to find -> archive locally; do not promise recovery of already unavailable content.
+- Writing, publishing, formatting, summarizing, or analyzing content without an archive request -> do not use this skill.
 
 ## Workflow
 

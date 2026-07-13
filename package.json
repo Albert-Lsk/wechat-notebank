@@ -1,7 +1,7 @@
 {
   "name": "wechat-notebank",
   "version": "0.1.0",
-  "description": "Archive WeChat public account articles to Markdown with Progressive Summarization",
+  "description": "Archive WeChat Official Account articles as local Markdown for Obsidian, Logseq, and personal knowledge bases",
   "main": "dist/index.js",
   "bin": {
     "alskai-notebank": "dist/index.js",
@@ -24,9 +24,17 @@
   },
   "keywords": [
     "wechat",
+    "wechat-article",
+    "wechat-official-account",
     "archive",
     "knowledge-base",
-    "markdown"
+    "markdown",
+    "obsidian",
+    "logseq",
+    "markdown-export",
+    "article-archiver",
+    "local-first",
+    "personal-knowledge-management"
   ],
   "repository": {
     "type": "git",

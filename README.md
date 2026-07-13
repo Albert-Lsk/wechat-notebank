@@ -1,6 +1,8 @@
 # wechat-notebank
 
-> 把微信公众号文章保存成可长期整理、搜索和复盘的 Markdown 笔记。
+> 把值得保留的微信公众号文章转成由自己掌控的本地 Markdown，沉淀到 Obsidian、Logseq 或个人知识库，随时搜索、引用和复盘。
+
+Archive WeChat Official Account articles as local Markdown for Obsidian, Logseq, and personal knowledge bases.
 
 [![Install from GitHub](https://img.shields.io/badge/install-GitHub-black?style=flat-square)](#安装或更新)
 [![MIT License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
@@ -9,7 +11,7 @@
 
 `wechat-notebank` 是一个本地命令行工具，用 Chrome 打开微信公众号文章，提取文章内容，然后保存为带 Frontmatter 的 Markdown 文件。
 
-它不需要接入大模型，不需要 OpenAI / Claude / Gemini API key。当前核心流程是：
+抓取、解析和写入都在本机完成，工具不会上传你的知识库。它不需要接入大模型，也不需要 OpenAI / Claude / Gemini API key。当前核心流程是：
 
 ```text
 微信公众号文章链接 -> 本机 Chrome 打开页面 -> 解析 HTML -> 保存 Markdown
@@ -17,12 +19,21 @@
 
 大模型只会在以后做“摘要、标签、自动提炼”这类增强功能时才可能需要。保存原文这件事本身不依赖大模型。
 
-## 适合谁
+最短用法：
 
-- 想把公众号文章长期保存到 Obsidian、Logseq 或普通文件夹的人
-- 想按发布日期、来源链接、作者信息管理文章的人
-- 想把阅读资料放进个人知识库，而不是只留在微信收藏夹里的人
-- 想用 Excel 批量整理一批公众号文章的人
+```bash
+alskai-notebank "https://mp.weixin.qq.com/s/xxxxx" -o ~/WeChatArticles
+```
+
+## 适用场景
+
+- 保存公众号文章，在链接失效或难以找回之前留下一份本地副本
+- 把微信文章转成 Markdown，迁移到 Obsidian、Logseq 或普通文件夹
+- 将已经整理出的微信收藏链接沉淀到可搜索、可引用的个人知识库
+- 按发布日期、来源链接、作者和公众号管理研究资料
+- 用 Excel 批量归档一批公众号文章链接
+
+工具需要目标文章仍可在本机 Chrome 中正常打开，不负责恢复已经失效或无权访问的内容。
 
 ## 效果预览
 

@@ -1,4 +1,4 @@
-Archive WeChat public account articles with the local `alskai-notebank` CLI.
+使用本地 `alskai-notebank` CLI，把值得保留的微信公众号文章归档为本地 Markdown，沉淀到 Obsidian、Logseq 或普通文件夹。
 
 Arguments:
 
@@ -6,7 +6,7 @@ Arguments:
 $ARGUMENTS
 ```
 
-Use this command as a thin wrapper around the CLI. Do not reimplement fetching or parsing.
+将这个命令作为 CLI 的轻量入口。不要在命令层重新实现抓取或解析。
 
 Steps:
 
