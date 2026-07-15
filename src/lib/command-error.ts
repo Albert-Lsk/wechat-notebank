@@ -1,4 +1,5 @@
 export type FetchErrorCode =
+  | 'CLI_USAGE_ERROR'
   | 'CONFIG_INVALID'
   | 'ARTICLE_UNAVAILABLE'
   | 'ARTICLE_PARSE_FAILED'

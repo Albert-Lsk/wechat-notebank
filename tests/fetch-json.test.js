@@ -51,6 +51,33 @@ assert.deepStrictEqual(output, {
 assert.match(result.stderr, /正在获取文章/);
 assert.ok(fs.existsSync(output.result.savedFile));
 
+const configuredHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-configured-'));
+const configuredArchivePath = path.join(configuredHome, 'configured-archive');
+fs.writeFileSync(
+  path.join(configuredHome, '.wechat-notebank.json'),
+  JSON.stringify({
+    name: 'Configured Notes',
+    archivePath: configuredArchivePath,
+    createdAt: '2026-07-16T00:00:00.000Z',
+    processingGoal: '提炼适合所有知识工作者复用的观点',
+    autoProcess: true,
+  })
+);
+const configuredResult = runCli([
+  'fetch',
+  'https://mp.weixin.qq.com/s/configured-json-success',
+  '--json',
+], configuredHome);
+
+assert.strictEqual(configuredResult.status, 0, configuredResult.stderr || configuredResult.stdout);
+const configuredOutput = JSON.parse(configuredResult.stdout);
+assert.strictEqual(configuredOutput.result.archiveRoot, configuredArchivePath);
+assert.strictEqual(
+  configuredOutput.result.processingGoal,
+  '提炼适合所有知识工作者复用的观点'
+);
+assert.strictEqual(configuredOutput.result.autoProcess, true);
+
 const missingUrlResult = runCli([
   'fetch',
   '--json',
@@ -64,7 +91,7 @@ assert.deepStrictEqual(JSON.parse(missingUrlResult.stdout), {
   command: 'fetch',
   status: 'failed',
   error: {
-    code: 'ARTICLE_UNAVAILABLE',
+    code: 'CLI_USAGE_ERROR',
     message: '请提供文章链接',
   },
 });
@@ -125,7 +152,7 @@ const invalidOptionOutput = JSON.parse(invalidOptionResult.stdout);
 assert.strictEqual(invalidOptionOutput.ok, false);
 assert.strictEqual(invalidOptionOutput.command, 'fetch');
 assert.strictEqual(invalidOptionOutput.status, 'failed');
-assert.strictEqual(invalidOptionOutput.error.code, 'ARTICLE_UNAVAILABLE');
+assert.strictEqual(invalidOptionOutput.error.code, 'CLI_USAGE_ERROR');
 assert.match(invalidOptionOutput.error.message, /Unknown fetch option/);
 
 const humanArchivePath = path.join(tempHome, 'human-output');

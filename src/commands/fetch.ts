@@ -16,8 +16,8 @@ export interface FetchCommandResult {
   sourceUrl: string;
   savedFile: string;
   archiveRoot: string;
-  processingGoal: null;
-  autoProcess: false;
+  processingGoal: string | null;
+  autoProcess: boolean;
 }
 
 export interface FetchCommandOptions {
@@ -58,8 +58,8 @@ export async function fetchCommand(
     sourceUrl: url,
     savedFile: filePath,
     archiveRoot: archivePath,
-    processingGoal: null,
-    autoProcess: false,
+    processingGoal: config?.processingGoal ?? null,
+    autoProcess: config?.autoProcess ?? false,
   };
 }
 

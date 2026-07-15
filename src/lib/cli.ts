@@ -13,6 +13,8 @@ export interface NormalizedCliArgs {
   args: string[];
 }
 
+const JSON_OPTION = '--json';
+
 export function normalizeCliArgs(args: string[]): NormalizedCliArgs {
   const [command, ...rest] = args;
 
@@ -37,7 +39,7 @@ export function parseFetchArgs(args: string[]): FetchArgs {
   for (let i = 0; i < args.length; i++) {
     const option = args[i];
 
-    if (option === '--json') {
+    if (isJsonOutputOption(option)) {
       json = true;
       continue;
     }
@@ -64,6 +66,14 @@ export function parseFetchArgs(args: string[]): FetchArgs {
   }
 
   return { url, outputPath, json };
+}
+
+export function isJsonOutputRequested(args: string[]): boolean {
+  return args.some(isJsonOutputOption);
+}
+
+function isJsonOutputOption(value: string): boolean {
+  return value === JSON_OPTION;
 }
 
 export function parseImportArgs(args: string[]): ImportArgs {

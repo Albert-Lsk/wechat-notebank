@@ -4,7 +4,12 @@ import { initCommand } from './commands/init';
 import { fetchCommand } from './commands/fetch';
 import { importCommand } from './commands/import';
 import { configExists } from './lib/config';
-import { normalizeCliArgs, parseFetchArgs, parseImportArgs } from './lib/cli';
+import {
+  isJsonOutputRequested,
+  normalizeCliArgs,
+  parseFetchArgs,
+  parseImportArgs,
+} from './lib/cli';
 import { writeJsonOutput } from './lib/command-output';
 import { CommandError, getErrorMessage } from './lib/command-error';
 
@@ -47,14 +52,14 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
   // fetch 命令
   if (command === 'fetch') {
-    const jsonRequested = args.includes('--json');
+    const jsonRequested = isJsonOutputRequested(args);
     let fetchArgs;
     try {
       fetchArgs = parseFetchArgs(args);
     } catch (error) {
       const message = error instanceof Error ? error.message : '参数错误';
       if (jsonRequested) {
-        writeFetchJsonFailure(new CommandError('ARTICLE_UNAVAILABLE', message));
+        writeFetchJsonFailure(new CommandError('CLI_USAGE_ERROR', message));
         return;
       }
 
@@ -67,7 +72,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     const { url, outputPath, json } = fetchArgs;
     if (!url) {
       if (json) {
-        writeFetchJsonFailure(new CommandError('ARTICLE_UNAVAILABLE', '请提供文章链接'));
+        writeFetchJsonFailure(new CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
         return;
       }
 
@@ -78,13 +83,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     }
 
     // 未指定输出目录时，沿用默认配置；不存在则引导初始化
-    if (!outputPath && !(await configExists())) {
-      if (json) {
-        const message = '未找到配置文件，请先运行 wechat-notebank init，或使用 --output <folder> 指定输出目录';
-        writeFetchJsonFailure(new CommandError('CONFIG_INVALID', message));
-        return;
-      }
-
+    if (!json && !outputPath && !(await configExists())) {
       console.log('🤖 首次使用，正在引导初始化...\n');
       await initCommand();
       console.log('');

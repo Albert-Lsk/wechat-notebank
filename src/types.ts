@@ -16,6 +16,8 @@ export interface WechatNotebankConfig {
   name: string;
   archivePath: string;
   createdAt: string;
+  processingGoal?: string;
+  autoProcess?: boolean;
 }
 
 export interface ParseResult {

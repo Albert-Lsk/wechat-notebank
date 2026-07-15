@@ -2,7 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizeCliArgs = normalizeCliArgs;
 exports.parseFetchArgs = parseFetchArgs;
+exports.isJsonOutputRequested = isJsonOutputRequested;
 exports.parseImportArgs = parseImportArgs;
+const JSON_OPTION = '--json';
 function normalizeCliArgs(args) {
     const [command, ...rest] = args;
     if (looksLikeWechatArticleUrl(command)) {
@@ -22,7 +24,7 @@ function parseFetchArgs(args) {
     let json = false;
     for (let i = 0; i < args.length; i++) {
         const option = args[i];
-        if (option === '--json') {
+        if (isJsonOutputOption(option)) {
             json = true;
             continue;
         }
@@ -44,6 +46,12 @@ function parseFetchArgs(args) {
         url = option;
     }
     return { url, outputPath, json };
+}
+function isJsonOutputRequested(args) {
+    return args.some(isJsonOutputOption);
+}
+function isJsonOutputOption(value) {
+    return value === JSON_OPTION;
 }
 function parseImportArgs(args) {
     const [filePath, ...options] = args;

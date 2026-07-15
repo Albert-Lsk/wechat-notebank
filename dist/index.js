@@ -44,7 +44,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     }
     // fetch 命令
     if (command === 'fetch') {
-        const jsonRequested = args.includes('--json');
+        const jsonRequested = (0, cli_1.isJsonOutputRequested)(args);
         let fetchArgs;
         try {
             fetchArgs = (0, cli_1.parseFetchArgs)(args);
@@ -52,7 +52,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
         catch (error) {
             const message = error instanceof Error ? error.message : '参数错误';
             if (jsonRequested) {
-                writeFetchJsonFailure(new command_error_1.CommandError('ARTICLE_UNAVAILABLE', message));
+                writeFetchJsonFailure(new command_error_1.CommandError('CLI_USAGE_ERROR', message));
                 return;
             }
             console.error(`❌ ${message}`);
@@ -63,7 +63,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
         const { url, outputPath, json } = fetchArgs;
         if (!url) {
             if (json) {
-                writeFetchJsonFailure(new command_error_1.CommandError('ARTICLE_UNAVAILABLE', '请提供文章链接'));
+                writeFetchJsonFailure(new command_error_1.CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
                 return;
             }
             console.error('❌ 请提供文章链接');
@@ -72,12 +72,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
             return;
         }
         // 未指定输出目录时，沿用默认配置；不存在则引导初始化
-        if (!outputPath && !(await (0, config_1.configExists)())) {
-            if (json) {
-                const message = '未找到配置文件，请先运行 wechat-notebank init，或使用 --output <folder> 指定输出目录';
-                writeFetchJsonFailure(new command_error_1.CommandError('CONFIG_INVALID', message));
-                return;
-            }
+        if (!json && !outputPath && !(await (0, config_1.configExists)())) {
             console.log('🤖 首次使用，正在引导初始化...\n');
             await (0, init_1.initCommand)();
             console.log('');

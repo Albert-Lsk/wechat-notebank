@@ -69,8 +69,8 @@ async function fetchCommand(url, outputPath, options = {}) {
         sourceUrl: url,
         savedFile: filePath,
         archiveRoot: archivePath,
-        processingGoal: null,
-        autoProcess: false,
+        processingGoal: config?.processingGoal ?? null,
+        autoProcess: config?.autoProcess ?? false,
     };
 }
 async function archiveArticle(url, archivePath) {
