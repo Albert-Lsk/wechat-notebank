@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node tests/fetch-args.test.js && node tests/resolve-archive-path.test.js && node tests/storage.test.js && node tests/importer.test.js && node tests/parser.test.js && node tests/fetch-html.test.js && node tests/url.test.js",
+    "test": "npm run build && node tests/fetch-args.test.js && node tests/fetch-json.test.js && node tests/resolve-archive-path.test.js && node tests/storage.test.js && node tests/importer.test.js && node tests/parser.test.js && node tests/fetch-html.test.js && node tests/url.test.js",
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js"
   },

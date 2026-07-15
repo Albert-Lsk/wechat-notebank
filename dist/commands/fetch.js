@@ -39,22 +39,24 @@ exports.resolveArchivePath = resolveArchivePath;
 const parser_1 = require("../lib/parser");
 const storage_1 = require("../lib/storage");
 const config_1 = require("../lib/config");
+const command_error_1 = require("../lib/command-error");
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
-async function fetchCommand(url, outputPath) {
+async function fetchCommand(url, outputPath, options = {}) {
     // 检查配置
-    const config = await (0, config_1.readConfig)();
+    let config;
     let archivePath;
     try {
+        config = await (0, config_1.readConfig)();
         archivePath = resolveArchivePath(config, outputPath);
     }
     catch (error) {
-        console.log(`❌ ${error instanceof Error ? error.message : '未知错误'}`);
-        return;
+        throw new command_error_1.CommandError('CONFIG_INVALID', (0, command_error_1.getErrorMessage)(error));
     }
-    console.log(`📥 正在获取文章: ${url}`);
-    try {
-        const { filePath, meta } = await archiveArticle(url, archivePath);
+    const log = options.json ? console.error : console.log;
+    log(`📥 正在获取文章: ${url}`);
+    const { filePath, meta } = await archiveArticle(url, archivePath);
+    if (!options.json) {
         console.log(`\n✅ 文章已保存！`);
         console.log(`📄 文件: ${filePath}`);
         console.log(`📌 标题: ${meta.title}`);
@@ -62,20 +64,42 @@ async function fetchCommand(url, outputPath) {
         console.log(`📅 发布: ${meta.pubDate}`);
         console.log(`🏷️  来源: ${meta.wechatName}`);
     }
-    catch (error) {
-        console.error(`\n❌ 错误: ${error instanceof Error ? error.message : '未知错误'}`);
-        process.exit(1);
-    }
+    return {
+        action: 'archive',
+        sourceUrl: url,
+        savedFile: filePath,
+        archiveRoot: archivePath,
+        processingGoal: null,
+        autoProcess: false,
+    };
 }
 async function archiveArticle(url, archivePath) {
     // 获取 HTML
-    const html = await (0, parser_1.fetchArticleHtml)(url);
+    let html;
+    try {
+        html = await (0, parser_1.fetchArticleHtml)(url);
+    }
+    catch (error) {
+        throw new command_error_1.CommandError('ARTICLE_UNAVAILABLE', (0, command_error_1.getErrorMessage)(error));
+    }
     // 解析文章
-    const parseResult = (0, parser_1.parseWechatArticle)(html, url);
+    let parseResult;
+    try {
+        parseResult = (0, parser_1.parseWechatArticle)(html, url);
+    }
+    catch (error) {
+        throw new command_error_1.CommandError('ARTICLE_PARSE_FAILED', (0, command_error_1.getErrorMessage)(error));
+    }
     // 构建元数据
     const meta = (0, parser_1.buildMeta)(parseResult, url);
     // 保存文件
-    const filePath = await (0, storage_1.saveArticle)(archivePath, parseResult.title, parseResult.content, meta);
+    let filePath;
+    try {
+        filePath = await (0, storage_1.saveArticle)(archivePath, parseResult.title, parseResult.content, meta);
+    }
+    catch (error) {
+        throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
+    }
     return { filePath, meta };
 }
 function resolveArchivePath(config, outputPath) {

@@ -17,12 +17,17 @@ function normalizeCliArgs(args) {
     };
 }
 function parseFetchArgs(args) {
-    const [url, ...options] = args;
+    let url;
     let outputPath;
-    for (let i = 0; i < options.length; i++) {
-        const option = options[i];
+    let json = false;
+    for (let i = 0; i < args.length; i++) {
+        const option = args[i];
+        if (option === '--json') {
+            json = true;
+            continue;
+        }
         if (option === '--output' || option === '-o') {
-            const value = options[i + 1];
+            const value = args[i + 1];
             if (!value || value.startsWith('-')) {
                 throw new Error(`${option} requires a folder path`);
             }
@@ -30,9 +35,15 @@ function parseFetchArgs(args) {
             i++;
             continue;
         }
-        throw new Error(`Unknown fetch option: ${option}`);
+        if (option.startsWith('-')) {
+            throw new Error(`Unknown fetch option: ${option}`);
+        }
+        if (url) {
+            throw new Error(`Unexpected fetch argument: ${option}`);
+        }
+        url = option;
     }
-    return { url, outputPath };
+    return { url, outputPath, json };
 }
 function parseImportArgs(args) {
     const [filePath, ...options] = args;

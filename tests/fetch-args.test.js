@@ -36,6 +36,7 @@ assert.deepStrictEqual(
   {
     url: 'https://mp.weixin.qq.com/s/example',
     outputPath: undefined,
+    json: false,
   }
 );
 
@@ -44,6 +45,7 @@ assert.deepStrictEqual(
   {
     url: 'https://mp.weixin.qq.com/s/example',
     outputPath: '/tmp/wechat-articles',
+    json: false,
   }
 );
 
@@ -52,6 +54,16 @@ assert.deepStrictEqual(
   {
     url: 'https://mp.weixin.qq.com/s/example',
     outputPath: './articles',
+    json: false,
+  }
+);
+
+assert.deepStrictEqual(
+  parseFetchArgs(['--json', 'https://mp.weixin.qq.com/s/example']),
+  {
+    url: 'https://mp.weixin.qq.com/s/example',
+    outputPath: undefined,
+    json: true,
   }
 );
 

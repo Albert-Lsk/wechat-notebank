@@ -1,7 +1,8 @@
 import { fetchArticleHtml, parseWechatArticle, buildMeta } from '../lib/parser';
 import { saveArticle } from '../lib/storage';
 import { readConfig } from '../lib/config';
-import { ArticleMeta, WechatNotebankConfig } from '../types';
+import { ArticleMeta, ParseResult, WechatNotebankConfig } from '../types';
+import { CommandError, getErrorMessage } from '../lib/command-error';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -10,32 +11,56 @@ export interface ArchiveArticleResult {
   meta: ArticleMeta;
 }
 
-export async function fetchCommand(url: string, outputPath?: string): Promise<void> {
+export interface FetchCommandResult {
+  action: 'archive';
+  sourceUrl: string;
+  savedFile: string;
+  archiveRoot: string;
+  processingGoal: null;
+  autoProcess: false;
+}
+
+export interface FetchCommandOptions {
+  json?: boolean;
+}
+
+export async function fetchCommand(
+  url: string,
+  outputPath?: string,
+  options: FetchCommandOptions = {}
+): Promise<FetchCommandResult> {
   // 检查配置
-  const config = await readConfig();
+  let config: WechatNotebankConfig | null;
   let archivePath: string;
   try {
+    config = await readConfig();
     archivePath = resolveArchivePath(config, outputPath);
   } catch (error) {
-    console.log(`❌ ${error instanceof Error ? error.message : '未知错误'}`);
-    return;
+    throw new CommandError('CONFIG_INVALID', getErrorMessage(error));
   }
+  const log = options.json ? console.error : console.log;
 
-  console.log(`📥 正在获取文章: ${url}`);
+  log(`📥 正在获取文章: ${url}`);
 
-  try {
-    const { filePath, meta } = await archiveArticle(url, archivePath);
+  const { filePath, meta } = await archiveArticle(url, archivePath);
 
+  if (!options.json) {
     console.log(`\n✅ 文章已保存！`);
     console.log(`📄 文件: ${filePath}`);
     console.log(`📌 标题: ${meta.title}`);
     console.log(`👤 作者: ${meta.author}`);
     console.log(`📅 发布: ${meta.pubDate}`);
     console.log(`🏷️  来源: ${meta.wechatName}`);
-  } catch (error) {
-    console.error(`\n❌ 错误: ${error instanceof Error ? error.message : '未知错误'}`);
-    process.exit(1);
   }
+
+  return {
+    action: 'archive',
+    sourceUrl: url,
+    savedFile: filePath,
+    archiveRoot: archivePath,
+    processingGoal: null,
+    autoProcess: false,
+  };
 }
 
 export async function archiveArticle(
@@ -43,21 +68,36 @@ export async function archiveArticle(
   archivePath: string
 ): Promise<ArchiveArticleResult> {
   // 获取 HTML
-  const html = await fetchArticleHtml(url);
+  let html: string;
+  try {
+    html = await fetchArticleHtml(url);
+  } catch (error) {
+    throw new CommandError('ARTICLE_UNAVAILABLE', getErrorMessage(error));
+  }
 
   // 解析文章
-  const parseResult = parseWechatArticle(html, url);
+  let parseResult: ParseResult;
+  try {
+    parseResult = parseWechatArticle(html, url);
+  } catch (error) {
+    throw new CommandError('ARTICLE_PARSE_FAILED', getErrorMessage(error));
+  }
 
   // 构建元数据
   const meta = buildMeta(parseResult, url);
 
   // 保存文件
-  const filePath = await saveArticle(
-    archivePath,
-    parseResult.title,
-    parseResult.content,
-    meta
-  );
+  let filePath: string;
+  try {
+    filePath = await saveArticle(
+      archivePath,
+      parseResult.title,
+      parseResult.content,
+      meta
+    );
+  } catch (error) {
+    throw new CommandError('TRANSACTION_FAILED', getErrorMessage(error));
+  }
 
   return { filePath, meta };
 }

@@ -6,6 +6,8 @@ const fetch_1 = require("./commands/fetch");
 const import_1 = require("./commands/import");
 const config_1 = require("./lib/config");
 const cli_1 = require("./lib/cli");
+const command_output_1 = require("./lib/command-output");
+const command_error_1 = require("./lib/command-error");
 async function main() {
     const normalized = (0, cli_1.normalizeCliArgs)(process.argv.slice(2));
     const { command, args } = normalized;
@@ -16,12 +18,12 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
 使用方法:
   alskai-notebank init                    初始化知识库
-  alskai-notebank <url> [--output <folder>]
+  alskai-notebank <url> [--output <folder>] [--json]
                                           存档文章
   alskai-notebank import <Excel文件地址>   批量导入文章
 
 兼容命令:
-  wechat-notebank fetch <url> [--output <folder>]
+  wechat-notebank fetch <url> [--output <folder>] [--json]
                                           存档文章
   wechat-notebank import <Excel文件地址>   批量导入文章
   wechat-notebank --help                  显示帮助
@@ -42,28 +44,66 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     }
     // fetch 命令
     if (command === 'fetch') {
+        const jsonRequested = args.includes('--json');
         let fetchArgs;
         try {
             fetchArgs = (0, cli_1.parseFetchArgs)(args);
         }
         catch (error) {
-            console.error(`❌ ${error instanceof Error ? error.message : '参数错误'}`);
-            console.error('   用法: alskai-notebank <url> [--output <folder>]');
-            process.exit(1);
+            const message = error instanceof Error ? error.message : '参数错误';
+            if (jsonRequested) {
+                writeFetchJsonFailure(new command_error_1.CommandError('ARTICLE_UNAVAILABLE', message));
+                return;
+            }
+            console.error(`❌ ${message}`);
+            console.error('   用法: alskai-notebank <url> [--output <folder>] [--json]');
+            process.exitCode = 1;
+            return;
         }
-        const { url, outputPath } = fetchArgs;
+        const { url, outputPath, json } = fetchArgs;
         if (!url) {
+            if (json) {
+                writeFetchJsonFailure(new command_error_1.CommandError('ARTICLE_UNAVAILABLE', '请提供文章链接'));
+                return;
+            }
             console.error('❌ 请提供文章链接');
-            console.error('   用法: alskai-notebank <url> [--output <folder>]');
-            process.exit(1);
+            console.error('   用法: alskai-notebank <url> [--output <folder>] [--json]');
+            process.exitCode = 1;
+            return;
         }
         // 未指定输出目录时，沿用默认配置；不存在则引导初始化
         if (!outputPath && !(await (0, config_1.configExists)())) {
+            if (json) {
+                const message = '未找到配置文件，请先运行 wechat-notebank init，或使用 --output <folder> 指定输出目录';
+                writeFetchJsonFailure(new command_error_1.CommandError('CONFIG_INVALID', message));
+                return;
+            }
             console.log('🤖 首次使用，正在引导初始化...\n');
             await (0, init_1.initCommand)();
             console.log('');
         }
-        await (0, fetch_1.fetchCommand)(url, outputPath);
+        try {
+            const result = await (0, fetch_1.fetchCommand)(url, outputPath, { json });
+            if (json) {
+                (0, command_output_1.writeJsonOutput)({
+                    ok: true,
+                    command: 'fetch',
+                    status: 'saved',
+                    result,
+                });
+            }
+        }
+        catch (error) {
+            const commandError = error instanceof command_error_1.CommandError
+                ? error
+                : new command_error_1.CommandError('ARTICLE_UNAVAILABLE', (0, command_error_1.getErrorMessage)(error));
+            if (json) {
+                writeFetchJsonFailure(commandError);
+                return;
+            }
+            console.error(`\n❌ 错误: ${commandError.message}`);
+            process.exitCode = 1;
+        }
         return;
     }
     // import 命令
@@ -90,5 +130,18 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     console.error(`❌ 未知命令: ${command}`);
     console.error('   使用 alskai-notebank --help 查看帮助');
     process.exit(1);
+}
+function writeFetchJsonFailure(error) {
+    console.error(`❌ ${error.message}`);
+    (0, command_output_1.writeJsonOutput)({
+        ok: false,
+        command: 'fetch',
+        status: 'failed',
+        error: {
+            code: error.code,
+            message: error.message,
+        },
+    });
+    process.exitCode = 1;
 }
 main();

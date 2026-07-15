@@ -1,6 +1,7 @@
 export interface FetchArgs {
   url: string | undefined;
   outputPath?: string;
+  json: boolean;
 }
 
 export interface ImportArgs {
@@ -29,14 +30,20 @@ export function normalizeCliArgs(args: string[]): NormalizedCliArgs {
 }
 
 export function parseFetchArgs(args: string[]): FetchArgs {
-  const [url, ...options] = args;
+  let url: string | undefined;
   let outputPath: string | undefined;
+  let json = false;
 
-  for (let i = 0; i < options.length; i++) {
-    const option = options[i];
+  for (let i = 0; i < args.length; i++) {
+    const option = args[i];
+
+    if (option === '--json') {
+      json = true;
+      continue;
+    }
 
     if (option === '--output' || option === '-o') {
-      const value = options[i + 1];
+      const value = args[i + 1];
       if (!value || value.startsWith('-')) {
         throw new Error(`${option} requires a folder path`);
       }
@@ -45,10 +52,18 @@ export function parseFetchArgs(args: string[]): FetchArgs {
       continue;
     }
 
-    throw new Error(`Unknown fetch option: ${option}`);
+    if (option.startsWith('-')) {
+      throw new Error(`Unknown fetch option: ${option}`);
+    }
+
+    if (url) {
+      throw new Error(`Unexpected fetch argument: ${option}`);
+    }
+
+    url = option;
   }
 
-  return { url, outputPath };
+  return { url, outputPath, json };
 }
 
 export function parseImportArgs(args: string[]): ImportArgs {
