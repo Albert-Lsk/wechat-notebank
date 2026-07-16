@@ -34,7 +34,17 @@ assert.match(archiveReference, /alskai-notebank fetch [^\n]*--json/);
 assert.match(archiveReference, /alskai-notebank import [^\n]*--json/);
 assert.match(archiveReference, /(multiple|多个)[^\n]*(URL|链接)/i);
 assert.match(archiveReference, /result\.savedFile/);
+assert.match(archiveReference, /SOURCE_URL_EXISTS/);
+assert.match(archiveReference, /exit code is `1`/);
+assert.match(archiveReference, /result\.items/);
+assert.match(archiveReference, /`partial`/);
 assert.match(archiveReference, /stderr/);
+assert.match(archiveReference, /result\.autoProcess/);
+assert.match(archiveReference, /result\.processingGoal/);
+assert.match(archiveReference, /only save[^\n]*autoProcess/i);
+assert.match(archiveReference, /osascript/);
+assert.match(archiveReference, /close theDocument saving no/);
+assert.match(archiveReference, /rm -rf/);
 assert.doesNotMatch(archiveReference, /\bpack\b|\bL[234]\b|审核|approve/i);
 
 const claudeCommand = fs.readFileSync(claudeCommandPath, 'utf8');
