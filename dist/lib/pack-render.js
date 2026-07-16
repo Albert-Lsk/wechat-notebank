@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setPackStatus = setPackStatus;
 exports.upsertDerivedLink = upsertDerivedLink;
+exports.withoutDerivedRegion = withoutDerivedRegion;
 exports.renderPack = renderPack;
 const gray_matter_1 = __importDefault(require("gray-matter"));
 const command_error_1 = require("./command-error");
@@ -19,14 +20,9 @@ function setPackStatus(content, supersededAt) {
     });
 }
 function upsertDerivedLink(sourceContent, link) {
-    const startMatches = sourceContent.split(DERIVED_START).length - 1;
-    const endMatches = sourceContent.split(DERIVED_END).length - 1;
-    if (startMatches !== endMatches || startMatches > 1) {
-        throw new command_error_1.CommandError('MANIFEST_INVALID', '原文衍生内容受控区域损坏');
-    }
-    if (startMatches === 1) {
-        const start = sourceContent.indexOf(DERIVED_START);
-        const end = sourceContent.indexOf(DERIVED_END, start);
+    const region = findDerivedRegion(sourceContent);
+    if (region) {
+        const { start, end } = region;
         const managed = sourceContent.slice(start, end);
         if (managed.includes(link)) {
             return sourceContent;
@@ -35,6 +31,29 @@ function upsertDerivedLink(sourceContent, link) {
     }
     const suffix = sourceContent.endsWith('\n') ? '\n' : '\n\n';
     return `${sourceContent}${suffix}${DERIVED_START}\n## 衍生内容\n${link}\n${DERIVED_END}\n`;
+}
+function withoutDerivedRegion(sourceContent) {
+    const region = findDerivedRegion(sourceContent);
+    if (!region) {
+        return sourceContent;
+    }
+    return `${sourceContent.slice(0, region.start)}${sourceContent.slice(region.endAfter)}`;
+}
+function findDerivedRegion(sourceContent) {
+    const startMatches = sourceContent.split(DERIVED_START).length - 1;
+    const endMatches = sourceContent.split(DERIVED_END).length - 1;
+    if (startMatches !== endMatches || startMatches > 1) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', '原文衍生内容受控区域损坏');
+    }
+    if (startMatches === 0) {
+        return null;
+    }
+    const start = sourceContent.indexOf(DERIVED_START);
+    const end = sourceContent.indexOf(DERIVED_END);
+    if (end < start) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', '原文衍生内容受控区域顺序无效');
+    }
+    return { start, end, endAfter: end + DERIVED_END.length };
 }
 function renderPack(input) {
     const l2 = input.manifest.atomicNotes.length > 0

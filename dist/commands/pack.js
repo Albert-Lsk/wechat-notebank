@@ -48,6 +48,17 @@ const pack_render_1 = require("../lib/pack-render");
 async function createPackCommand(args, transactionHooks = {}) {
     const sourceFile = path.resolve(args.sourceFile);
     const manifestFile = path.resolve(args.manifestFile);
+    const initial = await loadPackInputs(sourceFile, manifestFile);
+    const vaultRoot = findVaultRoot(sourceFile);
+    return (0, storage_1.withSourceUrlLock)(vaultRoot, initial.manifest.sourceUrl, async () => {
+        const current = await loadPackInputs(sourceFile, manifestFile);
+        if (current.manifest.sourceUrl !== initial.manifest.sourceUrl) {
+            throw new command_error_1.CommandError('MANIFEST_INVALID', '源 URL 在获取归档锁期间发生变化');
+        }
+        return createPackLocked(sourceFile, current, transactionHooks);
+    });
+}
+async function loadPackInputs(sourceFile, manifestFile) {
     let sourceContent;
     let manifestValue;
     try {
@@ -71,9 +82,13 @@ async function createPackCommand(args, transactionHooks = {}) {
     if (sourceData.sourceUrl !== manifest.sourceUrl) {
         throw new command_error_1.CommandError('MANIFEST_INVALID', 'Manifest sourceUrl 与原文不一致');
     }
-    (0, pack_manifest_1.validateQuotes)(manifest.materials, sourceDocument.content);
+    (0, pack_manifest_1.validateQuotes)(manifest.materials, (0, pack_render_1.withoutDerivedRegion)(sourceDocument.content));
+    return { sourceContent, sourceDocument, manifest };
+}
+async function createPackLocked(sourceFile, inputs, transactionHooks) {
+    const { sourceContent, sourceDocument, manifest } = inputs;
+    const sourceData = sourceDocument.data;
     const processingGoal = (0, pack_manifest_1.normalizeProcessingGoal)(manifest.processingGoal);
-    manifest.processingGoal = processingGoal;
     const packId = (0, pack_manifest_1.computePackId)(manifest.sourceUrl, processingGoal);
     const vaultRoot = findVaultRoot(sourceFile);
     const sourceStem = path.basename(sourceFile, path.extname(sourceFile));
@@ -129,6 +144,17 @@ async function createPackCommand(args, transactionHooks = {}) {
         manifest,
     };
     const revisionStateFile = path.join(path.dirname(stateFile), 'revisions', `${revision}.json`);
+    const unexpectedTargets = [packFile, revisionStateFile];
+    if (!existing) {
+        unexpectedTargets.push(stateFile);
+    }
+    const occupiedTarget = (await Promise.all(unexpectedTargets.map(async (target) => ({
+        target,
+        exists: await fs.pathExists(target),
+    })))).find((candidate) => candidate.exists);
+    if (occupiedTarget) {
+        throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', `加工包目标已存在，拒绝覆盖: ${occupiedTarget.target}`);
+    }
     const writes = [];
     try {
         if (existing) {
@@ -148,13 +174,24 @@ async function createPackCommand(args, transactionHooks = {}) {
                 content: serializeJson(superseded),
             });
         }
-        writes.push({ target: packFile, content: packContent });
-        writes.push({ target: revisionStateFile, content: serializeJson(state) });
-        writes.push({ target: stateFile, content: serializeJson(state) });
+        writes.push({ target: packFile, content: packContent, expectAbsent: true });
+        writes.push({
+            target: revisionStateFile,
+            content: serializeJson(state),
+            expectAbsent: true,
+        });
+        writes.push({
+            target: stateFile,
+            content: serializeJson(state),
+            expectAbsent: !existing,
+        });
         writes.push({ target: sourceFile, content: sourceWithLink });
         await (0, file_transaction_1.commitFileTransaction)(vaultRoot, writes, transactionHooks);
     }
     catch (error) {
+        if (error instanceof file_transaction_1.FileTransactionConflictError) {
+            throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', (0, command_error_1.getErrorMessage)(error));
+        }
         throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
     }
     return {
@@ -190,6 +227,11 @@ function validateCurrentPackState(value, packId, sourceFile, vaultRoot) {
     const relativePackFile = path.relative(vaultRoot, packFile);
     if (relativePackFile.startsWith('..') || path.isAbsolute(relativePackFile)) {
         throw new Error('加工包状态的 packFile 超出知识库');
+    }
+    const sourceStem = path.basename(sourceFile, path.extname(sourceFile));
+    const expectedPackFile = path.join(vaultRoot, 'Inbox', `${sourceStem}-${packId.slice(0, 12)}-r${Number(state.revision)}.md`);
+    if (packFile !== expectedPackFile) {
+        throw new Error('加工包状态的 packFile 与 revision 不匹配');
     }
     if (typeof state.createdAt !== 'string' || !state.createdAt) {
         throw new Error('加工包状态的 createdAt 无效');

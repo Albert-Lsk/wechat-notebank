@@ -156,6 +156,37 @@ assert.strictEqual(
   1
 );
 
+const managedQuoteManifest = path.join(root, 'manifest-managed-quote.json');
+fs.writeFileSync(managedQuoteManifest, JSON.stringify({
+  schemaVersion: 1,
+  sourceFile,
+  sourceUrl,
+  processingGoal: null,
+  atomicNotes: [],
+  materials: [{
+    id: 'L3-01',
+    kind: 'quote',
+    title: '伪造引用',
+    content: '待审核加工包 r1',
+    sourceSection: '衍生内容',
+  }],
+  reviewQuestions: [],
+}, null, 2));
+const managedQuoteResult = runCli([
+  'pack', 'create',
+  '--source', sourceFile,
+  '--manifest', managedQuoteManifest,
+  '--json',
+], root, home);
+assert.strictEqual(managedQuoteResult.status, 1);
+assert.strictEqual(
+  JSON.parse(managedQuoteResult.stdout).error.code,
+  'QUOTE_NOT_FOUND'
+);
+assert.strictEqual(fs.readFileSync(sourceFile, 'utf8'), initialSnapshot.source);
+assert.strictEqual(fs.readFileSync(packFile, 'utf8'), initialSnapshot.pack);
+assert.strictEqual(fs.readFileSync(stateFile, 'utf8'), initialSnapshot.state);
+
 const secondGoalManifest = path.join(root, 'manifest-second-goal.json');
 fs.writeFileSync(secondGoalManifest, JSON.stringify({
   schemaVersion: 1,

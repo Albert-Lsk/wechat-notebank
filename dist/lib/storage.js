@@ -133,7 +133,7 @@ async function withSourceUrlLock(archivePath, sourceUrl, action) {
     const lockDirectory = path.join(archivePath, '.alskai-notebank-locks');
     const lockName = (0, crypto_1.createHash)('sha256').update(sourceUrl).digest('hex');
     const lockPath = path.join(lockDirectory, `${lockName}.lock`);
-    await fs.ensureDir(lockDirectory);
+    await ensureSafeLockDirectory(archivePath, lockDirectory);
     const currentProcessIdentity = await getProcessIdentity(process.pid);
     if (currentProcessIdentity.status !== 'found') {
         throw new Error(`无法读取进程启动身份: ${process.pid}`);
@@ -183,7 +183,44 @@ async function withSourceUrlLock(archivePath, sourceUrl, action) {
         return await action();
     }
     finally {
-        await releaseOwnedLock(lockPath, owner);
+        try {
+            await releaseOwnedLock(lockPath, owner);
+        }
+        catch {
+            // action 的结果不应因锁清理残留被伪装成失败。
+        }
+        try {
+            await removeEmptyLockDirectory(lockDirectory);
+        }
+        catch {
+            // 保留残留锁目录，下一次调用仍可安全复用或诊断。
+        }
+    }
+}
+async function ensureSafeLockDirectory(archivePath, lockDirectory) {
+    await fs.ensureDir(archivePath);
+    if (await fs.pathExists(lockDirectory)) {
+        const stat = await fs.lstat(lockDirectory);
+        if (stat.isSymbolicLink() || !stat.isDirectory()) {
+            throw new Error(`来源归档锁目录无效: ${lockDirectory}`);
+        }
+        return;
+    }
+    await fs.ensureDir(lockDirectory);
+    const stat = await fs.lstat(lockDirectory);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+        throw new Error(`来源归档锁目录无效: ${lockDirectory}`);
+    }
+}
+async function removeEmptyLockDirectory(lockDirectory) {
+    try {
+        await fs.rmdir(lockDirectory);
+    }
+    catch (error) {
+        const code = error.code;
+        if (code !== 'ENOENT' && code !== 'ENOTEMPTY' && code !== 'EEXIST') {
+            throw error;
+        }
     }
 }
 async function quarantineAbandonedLock(lockPath) {

@@ -15,14 +15,9 @@ export function setPackStatus(content: string, supersededAt: string): string {
 }
 
 export function upsertDerivedLink(sourceContent: string, link: string): string {
-  const startMatches = sourceContent.split(DERIVED_START).length - 1;
-  const endMatches = sourceContent.split(DERIVED_END).length - 1;
-  if (startMatches !== endMatches || startMatches > 1) {
-    throw new CommandError('MANIFEST_INVALID', '原文衍生内容受控区域损坏');
-  }
-  if (startMatches === 1) {
-    const start = sourceContent.indexOf(DERIVED_START);
-    const end = sourceContent.indexOf(DERIVED_END, start);
+  const region = findDerivedRegion(sourceContent);
+  if (region) {
+    const { start, end } = region;
     const managed = sourceContent.slice(start, end);
     if (managed.includes(link)) {
       return sourceContent;
@@ -31,6 +26,33 @@ export function upsertDerivedLink(sourceContent: string, link: string): string {
   }
   const suffix = sourceContent.endsWith('\n') ? '\n' : '\n\n';
   return `${sourceContent}${suffix}${DERIVED_START}\n## 衍生内容\n${link}\n${DERIVED_END}\n`;
+}
+
+export function withoutDerivedRegion(sourceContent: string): string {
+  const region = findDerivedRegion(sourceContent);
+  if (!region) {
+    return sourceContent;
+  }
+  return `${sourceContent.slice(0, region.start)}${sourceContent.slice(region.endAfter)}`;
+}
+
+function findDerivedRegion(
+  sourceContent: string
+): { start: number; end: number; endAfter: number } | null {
+  const startMatches = sourceContent.split(DERIVED_START).length - 1;
+  const endMatches = sourceContent.split(DERIVED_END).length - 1;
+  if (startMatches !== endMatches || startMatches > 1) {
+    throw new CommandError('MANIFEST_INVALID', '原文衍生内容受控区域损坏');
+  }
+  if (startMatches === 0) {
+    return null;
+  }
+  const start = sourceContent.indexOf(DERIVED_START);
+  const end = sourceContent.indexOf(DERIVED_END);
+  if (end < start) {
+    throw new CommandError('MANIFEST_INVALID', '原文衍生内容受控区域顺序无效');
+  }
+  return { start, end, endAfter: end + DERIVED_END.length };
 }
 
 export function renderPack(input: {

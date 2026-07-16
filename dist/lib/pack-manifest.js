@@ -80,7 +80,34 @@ function validateInitialManifest(value, sourceFile) {
     validateAtomicNotes(manifest.atomicNotes);
     validateMaterials(manifest.materials);
     validateReviewQuestions(manifest.reviewQuestions);
-    return manifest;
+    const atomicNotes = manifest.atomicNotes;
+    const materials = manifest.materials;
+    const reviewQuestions = manifest.reviewQuestions;
+    return {
+        schemaVersion: 1,
+        sourceFile,
+        sourceUrl: manifest.sourceUrl.trim(),
+        processingGoal: normalizeProcessingGoal(manifest.processingGoal),
+        atomicNotes: atomicNotes.map((note) => ({
+            id: note.id,
+            title: note.title,
+            claim: note.claim,
+            evidence: note.evidence,
+            boundary: note.boundary,
+            useCases: [...note.useCases],
+        })),
+        materials: materials.map((material) => ({
+            id: material.id,
+            kind: material.kind,
+            title: material.title,
+            content: material.content,
+            sourceSection: material.sourceSection,
+        })),
+        reviewQuestions: reviewQuestions.map((question) => ({
+            id: question.id,
+            question: question.question,
+        })),
+    };
 }
 function validateQuotes(materials, sourceBody) {
     for (const material of materials) {
@@ -116,12 +143,14 @@ function validateAtomicNotes(value) {
     for (const [index, entry] of notes.entries()) {
         const label = `atomicNotes[${index}]`;
         const note = requireObject(entry, label);
+        assertExactFields(note, ['id', 'title', 'claim', 'evidence', 'boundary', 'useCases'], label);
         const id = requireString(note.id, `${label}.id`);
-        if (!/^L2-\d{2}$/.test(id)) {
-            throw new command_error_1.CommandError('MANIFEST_INVALID', `${label}.id 必须使用 L2- 加两位数字`);
-        }
         if (ids.has(id)) {
             throw new command_error_1.CommandError('MANIFEST_INVALID', `候选 ID 重复: ${id}`);
+        }
+        const expectedId = `L2-${String(index + 1).padStart(2, '0')}`;
+        if (id !== expectedId) {
+            throw new command_error_1.CommandError('MANIFEST_INVALID', `${label}.id 必须是 ${expectedId}`);
         }
         ids.add(id);
         for (const field of ['title', 'claim', 'evidence', 'boundary']) {
@@ -139,12 +168,14 @@ function validateMaterials(value) {
     for (const [index, entry] of materials.entries()) {
         const label = `materials[${index}]`;
         const material = requireObject(entry, label);
+        assertExactFields(material, ['id', 'kind', 'title', 'content', 'sourceSection'], label);
         const id = requireString(material.id, `${label}.id`);
-        if (!/^L3-\d{2}$/.test(id)) {
-            throw new command_error_1.CommandError('MANIFEST_INVALID', `${label}.id 必须使用 L3- 加两位数字`);
-        }
         if (ids.has(id)) {
             throw new command_error_1.CommandError('MANIFEST_INVALID', `候选 ID 重复: ${id}`);
+        }
+        const expectedId = `L3-${String(index + 1).padStart(2, '0')}`;
+        if (id !== expectedId) {
+            throw new command_error_1.CommandError('MANIFEST_INVALID', `${label}.id 必须是 ${expectedId}`);
         }
         ids.add(id);
         if (!['quote', 'paraphrase', 'case', 'data'].includes(String(material.kind))) {
@@ -161,12 +192,14 @@ function validateReviewQuestions(value) {
     for (const [index, entry] of questions.entries()) {
         const label = `reviewQuestions[${index}]`;
         const question = requireObject(entry, label);
+        assertExactFields(question, ['id', 'question'], label);
         const id = requireString(question.id, `${label}.id`);
-        if (!/^L4-Q\d{2}$/.test(id)) {
-            throw new command_error_1.CommandError('MANIFEST_INVALID', `${label}.id 必须使用 L4-Q 加两位数字`);
-        }
         if (ids.has(id)) {
             throw new command_error_1.CommandError('MANIFEST_INVALID', `候选 ID 重复: ${id}`);
+        }
+        const expectedId = `L4-Q${String(index + 1).padStart(2, '0')}`;
+        if (id !== expectedId) {
+            throw new command_error_1.CommandError('MANIFEST_INVALID', `${label}.id 必须是 ${expectedId}`);
         }
         ids.add(id);
         requireString(question.question, `${label}.question`);
@@ -177,6 +210,13 @@ function requireObject(value, label) {
         throw new command_error_1.CommandError('MANIFEST_INVALID', `${label} 必须是对象`);
     }
     return value;
+}
+function assertExactFields(value, allowedFields, label) {
+    const allowed = new Set(allowedFields);
+    const unknownFields = Object.keys(value).filter((field) => !allowed.has(field));
+    if (unknownFields.length > 0) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', `${label} 包含未知字段: ${unknownFields.join(', ')}`);
+    }
 }
 function requireString(value, label) {
     if (typeof value !== 'string' || !value.trim()) {

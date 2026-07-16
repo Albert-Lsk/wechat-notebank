@@ -121,6 +121,36 @@ const unknownTopLevelOutput = JSON.parse(unknownTopLevel.result.stdout);
 assert.strictEqual(unknownTopLevelOutput.error.code, 'MANIFEST_INVALID');
 assert.match(unknownTopLevelOutput.error.message, /generatedFor|未知字段/);
 
+const unknownCandidateField = runInvalidManifest({
+  atomicNotes: [{
+    id: 'L2-01',
+    title: '观点',
+    claim: '观点',
+    evidence: '正文中存在的原句。',
+    boundary: '边界',
+    useCases: [],
+    confidence: 0.9,
+  }],
+});
+assert.strictEqual(unknownCandidateField.result.status, 1);
+const unknownCandidateOutput = JSON.parse(unknownCandidateField.result.stdout);
+assert.strictEqual(unknownCandidateOutput.error.code, 'MANIFEST_INVALID');
+assert.match(unknownCandidateOutput.error.message, /confidence|未知字段/);
+
+const skippedCandidateId = runInvalidManifest({
+  materials: [{
+    id: 'L3-02',
+    kind: 'paraphrase',
+    title: '跳号素材',
+    content: '概括内容',
+    sourceSection: '正文',
+  }],
+});
+assert.strictEqual(skippedCandidateId.result.status, 1);
+const skippedCandidateOutput = JSON.parse(skippedCandidateId.result.stdout);
+assert.strictEqual(skippedCandidateOutput.error.code, 'MANIFEST_INVALID');
+assert.match(skippedCandidateOutput.error.message, /L3-01/);
+
 const malformedSource = runInvalidManifest({}, [
   '---',
   'title: [未闭合',
@@ -132,5 +162,25 @@ assert.strictEqual(malformedSource.result.status, 1);
 const malformedSourceOutput = JSON.parse(malformedSource.result.stdout);
 assert.strictEqual(malformedSourceOutput.error.code, 'MANIFEST_INVALID');
 assert.strictEqual(fs.existsSync(path.join(malformedSource.root, 'vault', 'Inbox')), false);
+
+const reversedMarkersContent = [
+  '---',
+  'title: 原文',
+  'sourceUrl: https://mp.weixin.qq.com/s/manifest-validation',
+  '---',
+  '',
+  '<!-- alskai-notebank:derived:end -->',
+  '标记外正文不能被修改。',
+  '<!-- alskai-notebank:derived:start -->',
+  '',
+].join('\n');
+const reversedMarkers = runInvalidManifest({}, reversedMarkersContent);
+assert.strictEqual(reversedMarkers.result.status, 1);
+const reversedMarkersOutput = JSON.parse(reversedMarkers.result.stdout);
+assert.strictEqual(reversedMarkersOutput.error.code, 'MANIFEST_INVALID');
+assert.strictEqual(
+  fs.readFileSync(reversedMarkers.sourceFile, 'utf8'),
+  reversedMarkersContent
+);
 
 console.log('pack manifest json tests passed');

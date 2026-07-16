@@ -33,11 +33,19 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.FileTransactionConflictError = void 0;
 exports.commitFileTransaction = commitFileTransaction;
 const fs = __importStar(require("fs-extra"));
 const path = __importStar(require("path"));
 const crypto_1 = require("crypto");
 const command_error_1 = require("./command-error");
+class FileTransactionConflictError extends Error {
+    constructor() {
+        super(...arguments);
+        this.code = 'TRANSACTION_TARGET_CONFLICT';
+    }
+}
+exports.FileTransactionConflictError = FileTransactionConflictError;
 async function commitFileTransaction(root, writes, hooks = {}) {
     assertUniqueTargets(writes);
     const transactionRoot = path.join(root, '.alskai-notebank', 'transactions', `${process.pid}-${(0, crypto_1.randomUUID)()}`);
@@ -45,13 +53,23 @@ async function commitFileTransaction(root, writes, hooks = {}) {
     const entries = [];
     let recoveryCompleted = true;
     try {
-        for (const [index, write] of writes.entries()) {
+        assertInsideRoot(root, transactionRoot);
+        await assertUsableParent(root, transactionRoot);
+        for (const write of writes) {
             assertInsideRoot(root, write.target);
-            await assertUsableParent(write.target);
-            const existed = await fs.pathExists(write.target);
+            await assertUsableParent(root, write.target);
+        }
+        for (const [index, write] of writes.entries()) {
+            const existed = await pathExistsWithLstat(write.target);
+            if (write.expectAbsent && existed) {
+                throw new FileTransactionConflictError(`事务目标已经存在: ${write.target}`);
+            }
             let original = null;
             if (existed) {
-                const stat = await fs.stat(write.target);
+                const stat = await fs.lstat(write.target);
+                if (stat.isSymbolicLink()) {
+                    throw new Error(`事务目标不能是符号链接: ${write.target}`);
+                }
                 if (!stat.isFile()) {
                     throw new Error(`事务目标不是文件: ${write.target}`);
                 }
@@ -67,19 +85,22 @@ async function commitFileTransaction(root, writes, hooks = {}) {
                 backup,
                 existed,
                 original,
-                commitStarted: false,
+                backupMoved: false,
+                stagedInstalled: false,
             });
         }
         for (const [index, entry] of entries.entries()) {
             await assertTargetUnchanged(entry);
             await hooks.beforeApply?.(index, entry.target);
             await fs.ensureDir(path.dirname(entry.target));
-            entry.commitStarted = true;
             if (entry.existed) {
                 await fs.ensureDir(path.dirname(entry.backup));
                 await fs.move(entry.target, entry.backup);
+                entry.backupMoved = true;
             }
+            await hooks.afterBackup?.(index, entry.target);
             await fs.move(entry.staged, entry.target);
+            entry.stagedInstalled = true;
         }
     }
     catch (error) {
@@ -95,8 +116,13 @@ async function commitFileTransaction(root, writes, hooks = {}) {
     }
     finally {
         if (recoveryCompleted) {
-            await fs.remove(transactionRoot);
-            await removeInitiallyMissingEmptyDirectories(initiallyMissingDirectories);
+            try {
+                await fs.remove(transactionRoot);
+                await removeInitiallyMissingEmptyDirectories(initiallyMissingDirectories);
+            }
+            catch {
+                // 提交已经完成；清理残留快照不应把成功操作伪装成事务失败。
+            }
         }
     }
 }
@@ -116,42 +142,71 @@ function assertInsideRoot(root, target) {
         throw new Error(`事务目标超出知识库: ${target}`);
     }
 }
-async function assertUsableParent(target) {
-    let candidate = path.dirname(target);
-    while (!(await fs.pathExists(candidate))) {
-        const parent = path.dirname(candidate);
-        if (parent === candidate) {
-            throw new Error(`无法解析事务目标父目录: ${target}`);
-        }
-        candidate = parent;
+async function assertUsableParent(root, target) {
+    const resolvedRoot = path.resolve(root);
+    const rootStat = await fs.stat(resolvedRoot);
+    if (!rootStat.isDirectory()) {
+        throw new Error(`事务根路径不是目录: ${resolvedRoot}`);
     }
-    if (!(await fs.stat(candidate)).isDirectory()) {
-        throw new Error(`事务目标父路径不是目录: ${candidate}`);
+    const relativeParent = path.relative(resolvedRoot, path.dirname(path.resolve(target)));
+    let candidate = resolvedRoot;
+    for (const segment of relativeParent.split(path.sep).filter(Boolean)) {
+        candidate = path.join(candidate, segment);
+        try {
+            const stat = await fs.lstat(candidate);
+            if (stat.isSymbolicLink()) {
+                throw new Error(`事务目标父路径不能是符号链接: ${candidate}`);
+            }
+            if (!stat.isDirectory()) {
+                throw new Error(`事务目标父路径不是目录: ${candidate}`);
+            }
+        }
+        catch (error) {
+            if (error.code === 'ENOENT') {
+                return;
+            }
+            throw error;
+        }
     }
 }
 async function assertTargetUnchanged(entry) {
-    const exists = await fs.pathExists(entry.target);
+    const exists = await pathExistsWithLstat(entry.target);
     if (!entry.existed) {
         if (exists) {
-            throw new Error(`事务目标在提交前被创建: ${entry.target}`);
+            throw new FileTransactionConflictError(`事务目标在提交前被创建: ${entry.target}`);
         }
         return;
     }
     if (!exists || !entry.original) {
         throw new Error(`事务目标在提交前消失: ${entry.target}`);
     }
+    const stat = await fs.lstat(entry.target);
+    if (stat.isSymbolicLink()) {
+        throw new Error(`事务目标在提交前变为符号链接: ${entry.target}`);
+    }
     const current = await fs.readFile(entry.target);
     if (!current.equals(entry.original)) {
         throw new Error(`事务目标在提交前发生变化: ${entry.target}`);
     }
 }
+async function pathExistsWithLstat(target) {
+    try {
+        await fs.lstat(target);
+        return true;
+    }
+    catch (error) {
+        if (error.code === 'ENOENT') {
+            return false;
+        }
+        throw error;
+    }
+}
 async function restoreEntries(entries) {
     for (const entry of [...entries].reverse()) {
-        if (!entry.commitStarted) {
-            continue;
+        if (entry.stagedInstalled) {
+            await fs.remove(entry.target);
         }
-        await fs.remove(entry.target);
-        if (entry.existed && await fs.pathExists(entry.backup)) {
+        if (entry.backupMoved) {
             await fs.ensureDir(path.dirname(entry.target));
             await fs.move(entry.backup, entry.target);
         }

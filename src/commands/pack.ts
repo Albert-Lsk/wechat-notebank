@@ -3,9 +3,10 @@ import * as path from 'path';
 import matter from 'gray-matter';
 import { PackCreateArgs } from '../lib/cli';
 import { CommandError, getErrorMessage } from '../lib/command-error';
-import { FOLDER_L1 } from '../lib/storage';
+import { FOLDER_L1, withSourceUrlLock } from '../lib/storage';
 import {
   commitFileTransaction,
+  FileTransactionConflictError,
   FileTransactionHooks,
   FileWrite,
 } from '../lib/file-transaction';
@@ -18,7 +19,12 @@ import {
   validateInitialManifest,
   validateQuotes,
 } from '../lib/pack-manifest';
-import { renderPack, setPackStatus, upsertDerivedLink } from '../lib/pack-render';
+import {
+  renderPack,
+  setPackStatus,
+  upsertDerivedLink,
+  withoutDerivedRegion,
+} from '../lib/pack-render';
 
 interface PackState {
   packId: string;
@@ -48,6 +54,27 @@ export async function createPackCommand(
 ): Promise<PackCreateResult> {
   const sourceFile = path.resolve(args.sourceFile);
   const manifestFile = path.resolve(args.manifestFile);
+  const initial = await loadPackInputs(sourceFile, manifestFile);
+  const vaultRoot = findVaultRoot(sourceFile);
+  return withSourceUrlLock(vaultRoot, initial.manifest.sourceUrl, async () => {
+    const current = await loadPackInputs(sourceFile, manifestFile);
+    if (current.manifest.sourceUrl !== initial.manifest.sourceUrl) {
+      throw new CommandError('MANIFEST_INVALID', '源 URL 在获取归档锁期间发生变化');
+    }
+    return createPackLocked(sourceFile, current, transactionHooks);
+  });
+}
+
+interface PackInputs {
+  sourceContent: string;
+  sourceDocument: matter.GrayMatterFile<string>;
+  manifest: InitialManifest;
+}
+
+async function loadPackInputs(
+  sourceFile: string,
+  manifestFile: string
+): Promise<PackInputs> {
   let sourceContent: string;
   let manifestValue: unknown;
   try {
@@ -70,10 +97,18 @@ export async function createPackCommand(
   if (sourceData.sourceUrl !== manifest.sourceUrl) {
     throw new CommandError('MANIFEST_INVALID', 'Manifest sourceUrl 与原文不一致');
   }
-  validateQuotes(manifest.materials, sourceDocument.content);
+  validateQuotes(manifest.materials, withoutDerivedRegion(sourceDocument.content));
+  return { sourceContent, sourceDocument, manifest };
+}
 
+async function createPackLocked(
+  sourceFile: string,
+  inputs: PackInputs,
+  transactionHooks: FileTransactionHooks
+): Promise<PackCreateResult> {
+  const { sourceContent, sourceDocument, manifest } = inputs;
+  const sourceData = sourceDocument.data as { title?: unknown };
   const processingGoal = normalizeProcessingGoal(manifest.processingGoal);
-  manifest.processingGoal = processingGoal;
   const packId = computePackId(manifest.sourceUrl, processingGoal);
   const vaultRoot = findVaultRoot(sourceFile);
   const sourceStem = path.basename(sourceFile, path.extname(sourceFile));
@@ -150,6 +185,22 @@ export async function createPackCommand(
     'revisions',
     `${revision}.json`
   );
+  const unexpectedTargets = [packFile, revisionStateFile];
+  if (!existing) {
+    unexpectedTargets.push(stateFile);
+  }
+  const occupiedTarget = (
+    await Promise.all(unexpectedTargets.map(async (target) => ({
+      target,
+      exists: await fs.pathExists(target),
+    })))
+  ).find((candidate) => candidate.exists);
+  if (occupiedTarget) {
+    throw new CommandError(
+      'PACK_ALREADY_EXISTS',
+      `加工包目标已存在，拒绝覆盖: ${occupiedTarget.target}`
+    );
+  }
 
   const writes: FileWrite[] = [];
   try {
@@ -174,12 +225,23 @@ export async function createPackCommand(
         content: serializeJson(superseded),
       });
     }
-    writes.push({ target: packFile, content: packContent });
-    writes.push({ target: revisionStateFile, content: serializeJson(state) });
-    writes.push({ target: stateFile, content: serializeJson(state) });
+    writes.push({ target: packFile, content: packContent, expectAbsent: true });
+    writes.push({
+      target: revisionStateFile,
+      content: serializeJson(state),
+      expectAbsent: true,
+    });
+    writes.push({
+      target: stateFile,
+      content: serializeJson(state),
+      expectAbsent: !existing,
+    });
     writes.push({ target: sourceFile, content: sourceWithLink });
     await commitFileTransaction(vaultRoot, writes, transactionHooks);
   } catch (error) {
+    if (error instanceof FileTransactionConflictError) {
+      throw new CommandError('PACK_ALREADY_EXISTS', getErrorMessage(error));
+    }
     throw new CommandError('TRANSACTION_FAILED', getErrorMessage(error));
   }
 
@@ -223,6 +285,15 @@ function validateCurrentPackState(
   const relativePackFile = path.relative(vaultRoot, packFile);
   if (relativePackFile.startsWith('..') || path.isAbsolute(relativePackFile)) {
     throw new Error('加工包状态的 packFile 超出知识库');
+  }
+  const sourceStem = path.basename(sourceFile, path.extname(sourceFile));
+  const expectedPackFile = path.join(
+    vaultRoot,
+    'Inbox',
+    `${sourceStem}-${packId.slice(0, 12)}-r${Number(state.revision)}.md`
+  );
+  if (packFile !== expectedPackFile) {
+    throw new Error('加工包状态的 packFile 与 revision 不匹配');
   }
   if (typeof state.createdAt !== 'string' || !state.createdAt) {
     throw new Error('加工包状态的 createdAt 无效');

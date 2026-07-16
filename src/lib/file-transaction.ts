@@ -3,13 +3,19 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { getErrorMessage } from './command-error';
 
+export class FileTransactionConflictError extends Error {
+  readonly code = 'TRANSACTION_TARGET_CONFLICT';
+}
+
 export interface FileWrite {
   target: string;
   content: string | Buffer;
+  expectAbsent?: boolean;
 }
 
 export interface FileTransactionHooks {
   beforeApply?: (index: number, target: string) => void | Promise<void>;
+  afterBackup?: (index: number, target: string) => void | Promise<void>;
 }
 
 interface TransactionEntry extends FileWrite {
@@ -17,7 +23,8 @@ interface TransactionEntry extends FileWrite {
   backup: string;
   existed: boolean;
   original: Buffer | null;
-  commitStarted: boolean;
+  backupMoved: boolean;
+  stagedInstalled: boolean;
 }
 
 export async function commitFileTransaction(
@@ -41,13 +48,23 @@ export async function commitFileTransaction(
   let recoveryCompleted = true;
 
   try {
-    for (const [index, write] of writes.entries()) {
+    assertInsideRoot(root, transactionRoot);
+    await assertUsableParent(root, transactionRoot);
+    for (const write of writes) {
       assertInsideRoot(root, write.target);
-      await assertUsableParent(write.target);
-      const existed = await fs.pathExists(write.target);
+      await assertUsableParent(root, write.target);
+    }
+    for (const [index, write] of writes.entries()) {
+      const existed = await pathExistsWithLstat(write.target);
+      if (write.expectAbsent && existed) {
+        throw new FileTransactionConflictError(`事务目标已经存在: ${write.target}`);
+      }
       let original: Buffer | null = null;
       if (existed) {
-        const stat = await fs.stat(write.target);
+        const stat = await fs.lstat(write.target);
+        if (stat.isSymbolicLink()) {
+          throw new Error(`事务目标不能是符号链接: ${write.target}`);
+        }
         if (!stat.isFile()) {
           throw new Error(`事务目标不是文件: ${write.target}`);
         }
@@ -63,7 +80,8 @@ export async function commitFileTransaction(
         backup,
         existed,
         original,
-        commitStarted: false,
+        backupMoved: false,
+        stagedInstalled: false,
       });
     }
 
@@ -71,12 +89,14 @@ export async function commitFileTransaction(
       await assertTargetUnchanged(entry);
       await hooks.beforeApply?.(index, entry.target);
       await fs.ensureDir(path.dirname(entry.target));
-      entry.commitStarted = true;
       if (entry.existed) {
         await fs.ensureDir(path.dirname(entry.backup));
         await fs.move(entry.target, entry.backup);
+        entry.backupMoved = true;
       }
+      await hooks.afterBackup?.(index, entry.target);
       await fs.move(entry.staged, entry.target);
+      entry.stagedInstalled = true;
     }
   } catch (error) {
     try {
@@ -91,8 +111,12 @@ export async function commitFileTransaction(
     throw error;
   } finally {
     if (recoveryCompleted) {
-      await fs.remove(transactionRoot);
-      await removeInitiallyMissingEmptyDirectories(initiallyMissingDirectories);
+      try {
+        await fs.remove(transactionRoot);
+        await removeInitiallyMissingEmptyDirectories(initiallyMissingDirectories);
+      } catch {
+        // 提交已经完成；清理残留快照不应把成功操作伪装成事务失败。
+      }
     }
   }
 }
@@ -115,30 +139,47 @@ function assertInsideRoot(root: string, target: string): void {
   }
 }
 
-async function assertUsableParent(target: string): Promise<void> {
-  let candidate = path.dirname(target);
-  while (!(await fs.pathExists(candidate))) {
-    const parent = path.dirname(candidate);
-    if (parent === candidate) {
-      throw new Error(`无法解析事务目标父目录: ${target}`);
-    }
-    candidate = parent;
+async function assertUsableParent(root: string, target: string): Promise<void> {
+  const resolvedRoot = path.resolve(root);
+  const rootStat = await fs.stat(resolvedRoot);
+  if (!rootStat.isDirectory()) {
+    throw new Error(`事务根路径不是目录: ${resolvedRoot}`);
   }
-  if (!(await fs.stat(candidate)).isDirectory()) {
-    throw new Error(`事务目标父路径不是目录: ${candidate}`);
+  const relativeParent = path.relative(resolvedRoot, path.dirname(path.resolve(target)));
+  let candidate = resolvedRoot;
+  for (const segment of relativeParent.split(path.sep).filter(Boolean)) {
+    candidate = path.join(candidate, segment);
+    try {
+      const stat = await fs.lstat(candidate);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`事务目标父路径不能是符号链接: ${candidate}`);
+      }
+      if (!stat.isDirectory()) {
+        throw new Error(`事务目标父路径不是目录: ${candidate}`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return;
+      }
+      throw error;
+    }
   }
 }
 
 async function assertTargetUnchanged(entry: TransactionEntry): Promise<void> {
-  const exists = await fs.pathExists(entry.target);
+  const exists = await pathExistsWithLstat(entry.target);
   if (!entry.existed) {
     if (exists) {
-      throw new Error(`事务目标在提交前被创建: ${entry.target}`);
+      throw new FileTransactionConflictError(`事务目标在提交前被创建: ${entry.target}`);
     }
     return;
   }
   if (!exists || !entry.original) {
     throw new Error(`事务目标在提交前消失: ${entry.target}`);
+  }
+  const stat = await fs.lstat(entry.target);
+  if (stat.isSymbolicLink()) {
+    throw new Error(`事务目标在提交前变为符号链接: ${entry.target}`);
   }
   const current = await fs.readFile(entry.target);
   if (!current.equals(entry.original)) {
@@ -146,13 +187,24 @@ async function assertTargetUnchanged(entry: TransactionEntry): Promise<void> {
   }
 }
 
+async function pathExistsWithLstat(target: string): Promise<boolean> {
+  try {
+    await fs.lstat(target);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function restoreEntries(entries: TransactionEntry[]): Promise<void> {
   for (const entry of [...entries].reverse()) {
-    if (!entry.commitStarted) {
-      continue;
+    if (entry.stagedInstalled) {
+      await fs.remove(entry.target);
     }
-    await fs.remove(entry.target);
-    if (entry.existed && await fs.pathExists(entry.backup)) {
+    if (entry.backupMoved) {
       await fs.ensureDir(path.dirname(entry.target));
       await fs.move(entry.backup, entry.target);
     }
