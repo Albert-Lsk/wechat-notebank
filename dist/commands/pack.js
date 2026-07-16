@@ -47,12 +47,15 @@ const pack_manifest_1 = require("../lib/pack-manifest");
 const pack_state_1 = require("../lib/pack-state");
 const pack_paths_1 = require("../lib/pack-paths");
 const pack_render_1 = require("../lib/pack-render");
+const pack_recovery_1 = require("../lib/pack-recovery");
 async function createPackCommand(args, transactionHooks = {}) {
     const sourceFile = path.resolve(args.sourceFile);
     const manifestFile = path.resolve(args.manifestFile);
-    const initial = await loadPackInputs(sourceFile, manifestFile);
     const vaultRoot = findVaultRoot(sourceFile);
+    await (0, pack_recovery_1.recoverPackTransactions)(vaultRoot);
+    const initial = await loadPackInputs(sourceFile, manifestFile);
     return (0, storage_1.withSourceUrlLock)(vaultRoot, initial.manifest.sourceUrl, async () => {
+        await (0, pack_recovery_1.recoverPackTransactions)(vaultRoot);
         const current = await loadPackInputs(sourceFile, manifestFile);
         if (current.manifest.sourceUrl !== initial.manifest.sourceUrl) {
             throw new command_error_1.CommandError('MANIFEST_INVALID', '源 URL 在获取归档锁期间发生变化');
@@ -102,13 +105,22 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
                 vaultRoot,
                 expectedPackId: packId,
                 expectedSourceFile: sourceFile,
-                allowedStatuses: ['pending', 'partial', 'approved'],
+                allowedStatuses: [
+                    'pending',
+                    'partial',
+                    'approved',
+                    'rejected',
+                    'revoked',
+                ],
             });
         }
         catch (error) {
             throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', (0, command_error_1.getErrorMessage)(error));
         }
         if ((0, pack_manifest_1.canonicalJson)((0, pack_manifest_1.initialManifestOf)(existing.manifest)) === (0, pack_manifest_1.canonicalJson)(manifest)) {
+            if (existing.status === 'superseded') {
+                throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', '当前加工包状态不能是 superseded');
+            }
             if (!(await fs.pathExists(existing.packFile))) {
                 throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', '加工包状态存在，但可见文件缺失');
             }
@@ -116,9 +128,7 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
                 action: 'reuse',
                 packId,
                 revision: existing.revision,
-                status: existing.status === 'partial' || existing.status === 'approved'
-                    ? existing.status
-                    : 'pending',
+                status: existing.status,
                 sourceFile,
                 sourceUrl: manifest.sourceUrl,
                 processingGoal,
@@ -152,6 +162,7 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
         createdAt,
         manifest,
         approvedItems: [],
+        revokedItems: [],
         outputs: [],
     };
     const revisionStateFile = path.join(path.dirname(stateFile), 'revisions', `${revision}.json`);

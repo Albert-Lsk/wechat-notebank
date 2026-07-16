@@ -18,6 +18,16 @@ export function setPackStatus(content: string, supersededAt: string): string {
   });
 }
 
+export function rejectPack(content: string, rejectedAt: string): string {
+  const document = matter(content);
+  return matter.stringify(document.content, {
+    ...document.data,
+    status: 'rejected',
+    rejectedAt,
+    updatedAt: rejectedAt,
+  });
+}
+
 export function upsertDerivedLink(sourceContent: string, link: string): string {
   const region = findDerivedRegion(sourceContent);
   if (region) {
@@ -30,6 +40,64 @@ export function upsertDerivedLink(sourceContent: string, link: string): string {
   }
   const suffix = sourceContent.endsWith('\n') ? '\n' : '\n\n';
   return `${sourceContent}${suffix}${DERIVED_START}\n## 衍生内容\n${link}\n${DERIVED_END}\n`;
+}
+
+export function removeDerivedLink(sourceContent: string, link: string): string {
+  const region = findDerivedRegion(sourceContent);
+  if (!region) {
+    return sourceContent;
+  }
+  const managed = sourceContent.slice(region.start, region.end);
+  const lines = managed.split('\n');
+  const nextLines = lines.filter((line) => line !== link);
+  if (nextLines.length === lines.length) {
+    return sourceContent;
+  }
+  return `${sourceContent.slice(0, region.start)}${nextLines.join('\n')}` +
+    `${sourceContent.slice(region.end)}`;
+}
+
+export function hasExactDerivedLink(sourceContent: string, link: string): boolean {
+  const region = findDerivedRegion(sourceContent);
+  if (!region) {
+    return false;
+  }
+  return sourceContent
+    .slice(region.start, region.end)
+    .split('\n')
+    .filter((line) => line === link)
+    .length === 1;
+}
+
+export function derivedRegionLinkLines(sourceContent: string): string[] {
+  const region = findDerivedRegion(sourceContent);
+  if (!region) {
+    return [];
+  }
+  return sourceContent
+    .slice(region.start, region.end)
+    .split('\n')
+    .filter((line) => line.startsWith('- '));
+}
+
+export function derivedRegionMatches(
+  sourceContent: string,
+  links: string[]
+): boolean {
+  const region = findDerivedRegion(sourceContent);
+  if (!region) {
+    return links.length === 0;
+  }
+  const lines = sourceContent.slice(region.start, region.endAfter).split('\n');
+  if (
+    lines[0] !== DERIVED_START ||
+    lines[1] !== '## 衍生内容' ||
+    lines[lines.length - 1] !== DERIVED_END
+  ) {
+    return false;
+  }
+  const actualLinks = lines.slice(2, -1).sort();
+  return JSON.stringify(actualLinks) === JSON.stringify([...links].sort());
 }
 
 export function withoutDerivedRegion(sourceContent: string): string {
@@ -60,6 +128,73 @@ export function updatePackPublication(
     approvedItems,
     updatedAt,
   });
+}
+
+export function revokePackPublication(
+  packContent: string,
+  approvedItems: string[],
+  revokedItems: string[],
+  links: string[],
+  revokedAt: string,
+  updatedAt: string
+): string {
+  const document = matter(packContent);
+  const body = upsertManagedRegion(
+    document.content,
+    PUBLISHED_START,
+    PUBLISHED_END,
+    ['## 已发布内容', '', ...links].join('\n')
+  );
+  return matter.stringify(body, {
+    ...document.data,
+    status: 'revoked',
+    approvedItems,
+    revokedItems,
+    revokedAt,
+    updatedAt,
+  });
+}
+
+export function hasExactPublishedLink(packContent: string, link: string): boolean {
+  const document = matter(packContent);
+  const region = findManagedRegion(
+    document.content,
+    PUBLISHED_START,
+    PUBLISHED_END,
+    '加工包已发布内容'
+  );
+  if (!region) {
+    return false;
+  }
+  return document.content
+    .slice(region.start, region.end)
+    .split('\n')
+    .filter((line) => line === link)
+    .length === 1;
+}
+
+export function publishedRegionMatches(
+  packContent: string,
+  links: string[]
+): boolean {
+  const document = matter(packContent);
+  const region = findManagedRegion(
+    document.content,
+    PUBLISHED_START,
+    PUBLISHED_END,
+    '加工包已发布内容'
+  );
+  if (!region) {
+    return links.length === 0;
+  }
+  const expected = [
+    PUBLISHED_START,
+    '## 已发布内容',
+    '',
+    ...links,
+    PUBLISHED_END,
+  ].join('\n');
+  return document.content.slice(region.start, region.endAfter) === expected;
 }
 
 export function updatePackReview(
@@ -138,6 +273,28 @@ function upsertManagedRegion(
     throw new CommandError('MANIFEST_INVALID', '加工包已发布内容起止标记顺序错误');
   }
   return `${content.slice(0, start)}${startMarker}\n${body}\n${content.slice(end)}`;
+}
+
+function findManagedRegion(
+  content: string,
+  startMarker: string,
+  endMarker: string,
+  label: string
+): { start: number; end: number; endAfter: number } | null {
+  const startCount = content.split(startMarker).length - 1;
+  const endCount = content.split(endMarker).length - 1;
+  if (startCount === 0 && endCount === 0) {
+    return null;
+  }
+  if (startCount !== 1 || endCount !== 1) {
+    throw new CommandError('MANIFEST_INVALID', `${label}受控区域损坏`);
+  }
+  const start = content.indexOf(startMarker);
+  const end = content.indexOf(endMarker);
+  if (end < start) {
+    throw new CommandError('MANIFEST_INVALID', `${label}起止标记顺序错误`);
+  }
+  return { start, end, endAfter: end + endMarker.length };
 }
 
 export function renderPack(input: {

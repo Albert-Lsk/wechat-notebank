@@ -36,9 +36,12 @@ export interface PackState {
   packFile: string;
   createdAt: string;
   updatedAt?: string;
+  rejectedAt?: string;
+  revokedAt?: string;
   supersededAt?: string;
   manifest: PackManifest;
   approvedItems: string[];
+  revokedItems: string[];
   outputs: PublishedOutput[];
 }
 
@@ -117,6 +120,39 @@ export function validatePackState(
   if (typeof state.createdAt !== 'string' || !state.createdAt) {
     throw new Error('加工包状态的 createdAt 无效');
   }
+  if (
+    state.supersededAt !== undefined &&
+    (typeof state.supersededAt !== 'string' || !state.supersededAt)
+  ) {
+    throw new Error('加工包状态的 supersededAt 无效');
+  }
+  if (state.status === 'superseded' && !state.supersededAt) {
+    throw new Error('superseded 加工包缺少 supersededAt');
+  }
+  if (
+    state.supersededAt !== undefined &&
+    state.status !== 'superseded' &&
+    state.status !== 'revoked'
+  ) {
+    throw new Error(`${state.status} 加工包不能包含 supersededAt`);
+  }
+  if (
+    state.rejectedAt !== undefined &&
+    (typeof state.rejectedAt !== 'string' || !state.rejectedAt)
+  ) {
+    throw new Error('加工包状态的 rejectedAt 无效');
+  }
+  if (state.status === 'rejected' && !state.rejectedAt) {
+    throw new Error('rejected 加工包缺少 rejectedAt');
+  }
+  if (
+    state.rejectedAt !== undefined &&
+    state.status !== 'rejected' &&
+    state.status !== 'revoked' &&
+    state.status !== 'superseded'
+  ) {
+    throw new Error(`${state.status} 加工包不能包含拒绝记录`);
+  }
 
   const candidateIds = [
     ...manifest.atomicNotes.map((item) => item.id),
@@ -124,6 +160,30 @@ export function validatePackState(
     ...manifest.reviewQuestions.map((item) => item.id),
   ];
   const approvedItems = validateApprovedItems(state.approvedItems, candidateIds);
+  const revokedItems = validateRevokedItems(
+    state.revokedItems,
+    candidateIds,
+    approvedItems
+  );
+  if (
+    state.revokedAt !== undefined &&
+    (typeof state.revokedAt !== 'string' || !state.revokedAt)
+  ) {
+    throw new Error('加工包状态的 revokedAt 无效');
+  }
+  if (Boolean(state.revokedAt) !== (revokedItems.length > 0)) {
+    throw new Error('加工包撤销记录必须同时包含 revokedAt 与 revokedItems');
+  }
+  if (state.status === 'revoked' && (!state.revokedAt || revokedItems.length === 0)) {
+    throw new Error('revoked 加工包缺少撤销时间或候选记录');
+  }
+  if (
+    state.status !== 'revoked' &&
+    state.status !== 'superseded' &&
+    (state.revokedAt !== undefined || revokedItems.length > 0)
+  ) {
+    throw new Error(`${state.status} 加工包不能包含撤销记录`);
+  }
   const outputs = validateOutputs(
     state.outputs,
     options.vaultRoot,
@@ -135,6 +195,15 @@ export function validatePackState(
   );
   const l4Output = outputs.find((output) => output.kind === 'L4');
   const reviewQuestionIds = manifest.reviewQuestions.map((question) => question.id);
+  const revokedReviewQuestionIds = reviewQuestionIds.filter(
+    (questionId) => revokedItems.includes(questionId)
+  );
+  if (
+    revokedReviewQuestionIds.length > 0 &&
+    revokedReviewQuestionIds.length !== reviewQuestionIds.length
+  ) {
+    throw new Error('L4 撤销记录必须包含当前 revision 的全部复盘问题');
+  }
   if (
     l4Output &&
     (
@@ -177,16 +246,23 @@ export function validatePackState(
     packFile,
     createdAt: state.createdAt,
     ...(typeof state.updatedAt === 'string' ? { updatedAt: state.updatedAt } : {}),
+    ...(typeof state.rejectedAt === 'string' ? { rejectedAt: state.rejectedAt } : {}),
+    ...(typeof state.revokedAt === 'string' ? { revokedAt: state.revokedAt } : {}),
     ...(typeof state.supersededAt === 'string'
       ? { supersededAt: state.supersededAt }
       : {}),
     manifest,
     approvedItems,
+    revokedItems,
     outputs,
   };
 }
 
-export async function locatePackState(packFileInput: string): Promise<LocatedPackState> {
+export async function locatePackState(
+  packFileInput: string,
+  allowedStatuses: PackStatus[] = ['pending', 'partial', 'approved'],
+  includeRevisionHistory = false
+): Promise<LocatedPackState> {
   const packFile = path.resolve(packFileInput);
   const inbox = path.dirname(packFile);
   if (path.basename(inbox) !== 'Inbox') {
@@ -205,52 +281,59 @@ export async function locatePackState(packFileInput: string): Promise<LocatedPac
     if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
       continue;
     }
-    const stateFile = path.join(packDirectory, 'state.json');
-    if (!(await fs.pathExists(stateFile))) {
-      continue;
-    }
-    const stateStat = await fs.lstat(stateFile);
-    if (stateStat.isSymbolicLink() || !stateStat.isFile()) {
-      continue;
-    }
-    let raw: Record<string, unknown>;
-    try {
-      const value = await fs.readJson(stateFile) as unknown;
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    const stateFiles = includeRevisionHistory
+      ? await packStateFiles(packDirectory)
+      : [path.join(packDirectory, 'state.json')];
+    for (const stateFile of stateFiles) {
+      if (!(await fs.pathExists(stateFile))) {
         continue;
       }
-      raw = value as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-    if (path.resolve(String(raw.packFile || '')) !== packFile) {
-      continue;
-    }
-    return {
-      vaultRoot,
-      stateFile,
-      state: validatePackState(raw, {
+      const stateStat = await fs.lstat(stateFile);
+      if (stateStat.isSymbolicLink() || !stateStat.isFile()) {
+        continue;
+      }
+      let raw: Record<string, unknown>;
+      try {
+        const value = await fs.readJson(stateFile) as unknown;
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          continue;
+        }
+        raw = value as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (path.resolve(String(raw.packFile || '')) !== packFile) {
+        continue;
+      }
+      return {
         vaultRoot,
-        expectedPackId: entry,
-        expectedPackFile: packFile,
-        allowedStatuses: ['pending', 'partial', 'approved'],
-      }),
-    };
+        stateFile,
+        state: validatePackState(raw, {
+          vaultRoot,
+          expectedPackId: entry,
+          expectedPackFile: packFile,
+          allowedStatuses,
+        }),
+      };
+    }
   }
   throw new Error('找不到加工包的隐藏状态');
 }
 
 export function serializePackState(value: PackState): string {
-  const normalized: PackState = {
+  const normalized = {
     packId: value.packId,
     revision: value.revision,
     status: value.status,
     packFile: value.packFile,
     createdAt: value.createdAt,
     ...(value.updatedAt ? { updatedAt: value.updatedAt } : {}),
+    ...(value.rejectedAt ? { rejectedAt: value.rejectedAt } : {}),
+    ...(value.revokedAt ? { revokedAt: value.revokedAt } : {}),
     ...(value.supersededAt ? { supersededAt: value.supersededAt } : {}),
     manifest: value.manifest,
     approvedItems: value.approvedItems,
+    ...(value.revokedItems.length > 0 ? { revokedItems: value.revokedItems } : {}),
     outputs: value.outputs,
   };
   return `${JSON.stringify(normalized, null, 2)}\n`;
@@ -365,6 +448,31 @@ function validateApprovedItems(value: unknown, candidateIds: string[]): string[]
   }
   if (normalized.some((item, index) => item !== value[index])) {
     throw new Error('加工包 approvedItems 顺序无效');
+  }
+  return normalized;
+}
+
+function validateRevokedItems(
+  value: unknown,
+  candidateIds: string[],
+  approvedItems: string[]
+): string[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error('加工包 revokedItems 无效');
+  }
+  const selected = new Set(value as string[]);
+  const normalized = candidateIds.filter((item) => selected.has(item));
+  if (selected.size !== value.length || normalized.length !== value.length) {
+    throw new Error('加工包 revokedItems 包含重复或未知候选');
+  }
+  if (normalized.some((item, index) => item !== value[index])) {
+    throw new Error('加工包 revokedItems 顺序无效');
+  }
+  if (normalized.some((item) => approvedItems.includes(item))) {
+    throw new Error('加工包 approvedItems 与 revokedItems 不能重叠');
   }
   return normalized;
 }

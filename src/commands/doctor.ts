@@ -13,6 +13,7 @@ import {
   matchesBundledClaudeCommand,
   matchesBundledSkill,
 } from '../lib/agent-integration';
+import { inferVaultRoot, inspectPackIntegrity } from '../lib/pack-integrity';
 
 export type DoctorStatus = 'passed' | 'warning' | 'failed';
 
@@ -232,6 +233,15 @@ async function checkConfigAndArchive(): Promise<DoctorCheck[]> {
       }
       await fs.access(archivePath, constants.W_OK);
       checks.push({ id: 'archive', status: 'passed', message: archivePath });
+      try {
+        checks.push(...await inspectPackIntegrity(inferVaultRoot(archivePath)));
+      } catch (error) {
+        checks.push({
+          id: 'integrity',
+          status: 'warning',
+          message: `无法完成加工包完整性扫描: ${getErrorMessage(error)}`,
+        });
+      }
     } catch {
       checks.push({
         id: 'archive',

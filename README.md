@@ -177,10 +177,12 @@ $HOME\WeChatArticles
 | `alskai-notebank init --scope global --archive-path <folder>` | 设置用户全局默认配置 |
 | `alskai-notebank init --scope project --archive-path <folder>` | 设置当前项目覆盖配置 |
 | `alskai-notebank setup --agents <targets> [--dry-run] --json` | 安装或更新指定 Agent 集成 |
-| `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill 与配置 |
+| `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill、配置与加工包完整性 |
 | `alskai-notebank pack create --source <file> --manifest <manifest.json> --json` | 创建或修订待审核加工包 |
 | `alskai-notebank pack update <pack> --manifest <manifest.json> --json` | 记录 L4 用户原话与 Agent 整理稿 |
 | `alskai-notebank pack approve <pack> --items <ids> --json` | 选择性审批并发布 L2/L3/L4 候选 |
+| `alskai-notebank pack reject <pack> --json` | 拒绝尚未完成审批的加工包 |
+| `alskai-notebank pack revoke <pack> --items <ids> --json` | 安全撤销已发布候选及其双链 |
 | `alskai-notebank <url>` | 保存单篇文章到默认路径 |
 | `alskai-notebank fetch <url>` | 保存单篇文章，和上面等价 |
 | `alskai-notebank <url> --output <folder>` | 保存到指定目录 |
@@ -256,6 +258,29 @@ alskai-notebank pack approve \
 ```
 
 每个获批 L2 观点会生成一张独立原子卡片；同一篇来源在不同加工目标和 revision 中获批的 L3 内容会合并到唯一素材包，L4 贡献会合并到唯一阅读复盘。L4 必须已记录全部问题的用户原话与 Agent 整理稿，并一次选择全部 `L4-Qxx` ID。部分审批返回 `partial`；全部 L2、L3 和 L4 候选均已发布时返回 `approved`。重复更新或审批不会重复生成文件、贡献区块或双链。
+
+### 拒绝或撤销
+
+不采用尚未完成审批的加工包时，可直接拒绝：
+
+```bash
+alskai-notebank pack reject \
+  ~/WeChatArticles/Inbox/待审核加工包.md \
+  --json
+```
+
+拒绝 `partial` 加工包会保留此前已经发布的文件与双链，只终止未审批候选。需要删除已发布内容时，按稳定 ID 撤销：
+
+```bash
+alskai-notebank pack revoke \
+  ~/WeChatArticles/Inbox/待审核加工包.md \
+  --items L2-01,L3-02 \
+  --json
+```
+
+撤销会同步更新加工包状态和受控双链。L2 文件只有在内容仍与发布哈希一致时才会删除；共享 L3/L4 使用各自隐藏状态中的当前聚合哈希，仍有其他加工目标贡献时只重建聚合文件。L4 必须一次撤销当前加工包的全部 `L4-Qxx`。若生成文件被人工编辑，命令返回 `DERIVED_FILE_MODIFIED` 并保持知识库不变。重复撤销同一候选返回 `unchanged`。
+
+`doctor --json` 会只读报告生成文件缺失、哈希漂移、双链断裂、隐藏状态缺失，以及当前状态与 revision 快照不一致；它不会自动删除、改写或修复知识库。
 
 ## 输出文件
 

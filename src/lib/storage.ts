@@ -1,29 +1,15 @@
 import * as fs from 'fs-extra';
 import { createHash, randomUUID } from 'crypto';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import * as path from 'path';
 import matter from 'gray-matter';
 import { ArticleMeta } from '../types';
+import { getProcessIdentity } from './process-identity';
 
 const MAX_FILENAME_BYTES = 240;
 const SOURCE_LOCK_RETRY_MS = 25;
 const SOURCE_LOCK_TIMEOUT_MS = 60_000;
 const INVALID_OWNER_STALE_MS = 45_000;
 const SOURCE_LOCK_OWNER_FILE = 'owner.json';
-const PROCESS_IDENTITY_CACHE_MS = 1_000;
-const execFileAsync = promisify(execFile);
-
-type ProcessIdentityResult =
-  | { status: 'found'; identity: string }
-  | { status: 'missing' }
-  | { status: 'unknown' };
-
-const processIdentityCache = new Map<number, {
-  result: ProcessIdentityResult;
-  expiresAt: number;
-}>();
-
 interface SourceLockOwner {
   pid: number;
   token: string;
@@ -344,59 +330,12 @@ function isSourceLockOwner(value: unknown): value is SourceLockOwner {
   );
 }
 
-async function getProcessIdentity(pid: number): Promise<ProcessIdentityResult> {
-  const cached = processIdentityCache.get(pid);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.result;
-  }
-
-  let result: ProcessIdentityResult;
-  try {
-    const { stdout } = await execFileAsync('/bin/ps', [
-      '-p',
-      String(pid),
-      '-o',
-      'lstart=',
-    ], {
-      env: {
-        ...process.env,
-        TZ: 'UTC',
-        LC_ALL: 'C',
-        LANG: 'C',
-      },
-    });
-    const identity = stdout.trim();
-    result = identity
-      ? { status: 'found', identity }
-      : { status: 'unknown' };
-  } catch (error) {
-    result = hasNumericErrorCode(error, 1)
-      ? { status: 'missing' }
-      : { status: 'unknown' };
-  }
-
-  processIdentityCache.set(pid, {
-    result,
-    expiresAt: Date.now() + PROCESS_IDENTITY_CACHE_MS,
-  });
-  return result;
-}
-
 function hasErrorCode(error: unknown, code: string): boolean {
   return Boolean(
     error &&
     typeof error === 'object' &&
     'code' in error &&
     (error as NodeJS.ErrnoException).code === code
-  );
-}
-
-function hasNumericErrorCode(error: unknown, code: number): boolean {
-  return Boolean(
-    error &&
-    typeof error === 'object' &&
-    'code' in error &&
-    (error as { code?: unknown }).code === code
   );
 }
 

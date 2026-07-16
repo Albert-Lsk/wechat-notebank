@@ -49,10 +49,13 @@ const pack_render_1 = require("../lib/pack-render");
 const shared_materials_1 = require("../lib/shared-materials");
 const shared_reflections_1 = require("../lib/shared-reflections");
 const storage_1 = require("../lib/storage");
+const pack_recovery_1 = require("../lib/pack-recovery");
 async function approvePackCommand(args, transactionHooks = {}) {
     const packFile = path.resolve(args.packFile);
+    await (0, pack_recovery_1.recoverPackTransactionsForFile)(packFile);
     const initial = await locatePack(packFile);
     return (0, storage_1.withSourceUrlLock)(initial.vaultRoot, initial.state.manifest.sourceUrl, async () => {
+        await (0, pack_recovery_1.recoverPackTransactions)(initial.vaultRoot);
         const current = await locatePack(packFile);
         if (current.state.packId !== initial.state.packId) {
             throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', '加工包状态在获取锁期间发生变化');

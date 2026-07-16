@@ -1,7 +1,12 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { getErrorMessage } from './command-error';
+import { getProcessIdentity } from './process-identity';
+
+const TRANSACTION_JOURNAL = 'journal.json';
+const activeTransactionRoots = new Set<string>();
+const activeRecoveryRoots = new Set<string>();
 
 export class FileTransactionConflictError extends Error {
   readonly code = 'TRANSACTION_TARGET_CONFLICT';
@@ -13,127 +18,304 @@ export class FileTransactionPreconditionError extends FileTransactionConflictErr
   }
 }
 
+class FileTransactionRollbackConflictError extends Error {}
+
 export interface FileWrite {
   target: string;
   content: string | Buffer;
   expectAbsent?: boolean;
   expectedContent?: string | Buffer;
+  delete?: never;
 }
+
+export interface FileDelete {
+  target: string;
+  delete: true;
+  expectedContent: string | Buffer;
+  content?: never;
+  expectAbsent?: never;
+}
+
+export type FileMutation = FileWrite | FileDelete;
 
 export interface FileTransactionHooks {
   beforeApply?: (index: number, target: string) => void | Promise<void>;
   afterBackup?: (index: number, target: string) => void | Promise<void>;
 }
 
-interface TransactionEntry extends FileWrite {
-  staged: string;
+interface TransactionEntry {
+  mutation: FileMutation;
+  target: string;
+  staged: string | null;
   backup: string;
   existed: boolean;
   original: Buffer | null;
+  originalIdentity: FileIdentity | null;
+  stagedIdentity: FileIdentity | null;
+  parentIdentities: DirectoryIdentity[];
   backupMoved: boolean;
   stagedInstalled: boolean;
 }
 
+interface FileIdentity {
+  dev: number;
+  ino: number;
+}
+
+interface DirectoryIdentity {
+  target: string;
+  dev: number;
+  ino: number;
+}
+
+interface TransactionJournalEntry {
+  target: string;
+  kind: 'write' | 'delete';
+  existed: boolean;
+  originalSha256: string | null;
+  writtenSha256: string | null;
+  writtenIdentity: FileIdentity | null;
+  parentIdentities: DirectoryIdentity[];
+}
+
+interface TransactionJournal {
+  schemaVersion: 1;
+  phase: 'prepared' | 'committed' | 'conflicted';
+  owner: {
+    pid: number;
+    processStartedAt: string;
+  };
+  initiallyMissingDirectories: string[];
+  entries: TransactionJournalEntry[];
+}
+
+interface RecoveryClaimOwner {
+  pid: number;
+  identityHash: string | null;
+}
+
+interface TransactionWorkspaceIdentity {
+  transactionsRoot: DirectoryIdentity;
+  transactionRoot: DirectoryIdentity;
+}
+
 export async function commitFileTransaction(
   root: string,
-  writes: FileWrite[],
+  mutations: FileMutation[],
   hooks: FileTransactionHooks = {}
 ): Promise<void> {
-  assertUniqueTargets(writes);
+  root = path.resolve(root);
+  await recoverInterruptedFileTransactions(root);
+  assertUniqueTargets(mutations);
+  if (mutations.length === 0) {
+    return;
+  }
+  const currentProcessIdentity = await requireCurrentProcessIdentity();
   const transactionRoot = path.join(
     root,
     '.alskai-notebank',
     'transactions',
-    `${process.pid}-${randomUUID()}`
+    `${process.pid}-${processIdentityHash(currentProcessIdentity)}-${randomUUID()}`
   );
   const initiallyMissingDirectories = await findInitiallyMissingDirectories(
     root,
     transactionRoot,
-    writes
+    mutations
   );
   const entries: TransactionEntry[] = [];
   let recoveryCompleted = true;
+  let journal: TransactionJournal | null = null;
+  let workspaceIdentity: TransactionWorkspaceIdentity | null = null;
+  let cleanupRoot: string | null = null;
+  activeTransactionRoots.add(transactionRoot);
 
   try {
     assertInsideRoot(root, transactionRoot);
-    await assertUsableParent(root, transactionRoot);
-    for (const write of writes) {
-      assertInsideRoot(root, write.target);
-      await assertUsableParent(root, write.target);
+    workspaceIdentity = await createTransactionWorkspace(root, transactionRoot);
+    for (const mutation of mutations) {
+      assertInsideRoot(root, mutation.target);
+      await assertUsableParent(root, mutation.target);
     }
-    for (const [index, write] of writes.entries()) {
-      const existed = await pathExistsWithLstat(write.target);
-      if (write.expectAbsent && existed) {
+    for (const [index, mutation] of mutations.entries()) {
+      if (mutation.delete && mutation.expectedContent === undefined) {
+        throw new Error(`删除事务目标必须提供原始内容: ${mutation.target}`);
+      }
+      const existed = await pathExistsWithLstat(mutation.target);
+      if (mutation.delete && !existed) {
         throw new FileTransactionPreconditionError(
-          write.target,
-          `事务目标已经存在: ${write.target}`
+          mutation.target,
+          `待删除的事务目标不存在: ${mutation.target}`
+        );
+      }
+      if (!mutation.delete && mutation.expectAbsent && existed) {
+        throw new FileTransactionPreconditionError(
+          mutation.target,
+          `事务目标已经存在: ${mutation.target}`
         );
       }
       let original: Buffer | null = null;
+      let originalIdentity: FileIdentity | null = null;
       if (existed) {
-        const stat = await fs.lstat(write.target);
+        const stat = await fs.lstat(mutation.target);
         if (stat.isSymbolicLink()) {
-          throw new Error(`事务目标不能是符号链接: ${write.target}`);
+          throw new Error(`事务目标不能是符号链接: ${mutation.target}`);
         }
         if (!stat.isFile()) {
-          throw new Error(`事务目标不是文件: ${write.target}`);
+          throw new Error(`事务目标不是文件: ${mutation.target}`);
         }
-        original = await fs.readFile(write.target);
+        original = await fs.readFile(mutation.target);
+        const verifiedStat = await fs.lstat(mutation.target);
+        if (!sameFileIdentity(stat, verifiedStat)) {
+          throw new FileTransactionPreconditionError(
+            mutation.target,
+            `事务目标在读取期间被替换: ${mutation.target}`
+          );
+        }
+        originalIdentity = fileIdentity(stat);
       }
-      if (write.expectedContent !== undefined) {
-        const expected = Buffer.isBuffer(write.expectedContent)
-          ? write.expectedContent
-          : Buffer.from(write.expectedContent);
+      if (mutation.expectedContent !== undefined) {
+        const expected = Buffer.isBuffer(mutation.expectedContent)
+          ? mutation.expectedContent
+          : Buffer.from(mutation.expectedContent);
         if (!original || !original.equals(expected)) {
           throw new FileTransactionPreconditionError(
-            write.target,
-            `事务目标与命令读取时的内容不一致: ${write.target}`
+            mutation.target,
+            `事务目标与命令读取时的内容不一致: ${mutation.target}`
           );
         }
       }
-      const staged = path.join(transactionRoot, 'staged', String(index));
+      const staged = mutation.delete
+        ? null
+        : path.join(transactionRoot, 'staged', String(index));
       const backup = path.join(transactionRoot, 'backup', String(index));
-      await fs.ensureDir(path.dirname(staged));
-      await fs.writeFile(staged, write.content);
+      let stagedIdentity: FileIdentity | null = null;
+      if (staged && !mutation.delete) {
+        await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+        await fs.ensureDir(path.dirname(staged));
+        await fs.writeFile(staged, mutation.content);
+        stagedIdentity = fileIdentity(await fs.lstat(staged));
+        await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+      }
+      const parentIdentities = await captureParentIdentities(root, mutation.target);
       entries.push({
-        ...write,
+        mutation,
+        target: mutation.target,
         staged,
         backup,
         existed,
         original,
+        originalIdentity,
+        stagedIdentity,
+        parentIdentities,
         backupMoved: false,
         stagedInstalled: false,
       });
     }
 
-    for (const [index, entry] of entries.entries()) {
-      await assertTargetUnchanged(entry);
-      await hooks.beforeApply?.(index, entry.target);
+    journal = await createTransactionJournal(entries, initiallyMissingDirectories);
+    await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+    await writeTransactionJournal(transactionRoot, journal);
+    await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+    for (const entry of entries) {
       await fs.ensureDir(path.dirname(entry.target));
+      await assertUsableParent(root, entry.target);
+      entry.parentIdentities = await captureParentIdentities(root, entry.target);
+    }
+    journal = await createTransactionJournal(entries, initiallyMissingDirectories);
+    await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+    await writeTransactionJournal(transactionRoot, journal);
+    await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+
+    for (const [index, entry] of entries.entries()) {
+      await hooks.beforeApply?.(index, entry.target);
+      await assertParentIdentitiesUnchanged(entry);
+      await assertUsableParent(root, entry.target);
+      await assertTargetUnchanged(entry);
       if (entry.existed) {
+        await assertTransactionWorkspaceUnchanged(workspaceIdentity);
         await fs.ensureDir(path.dirname(entry.backup));
-        await fs.move(entry.target, entry.backup);
-        entry.backupMoved = true;
-        await assertBackupUnchanged(entry);
+        await moveTargetToBackup(entry);
+        await assertTransactionWorkspaceUnchanged(workspaceIdentity);
       }
+      await assertParentIdentitiesUnchanged(entry);
       await hooks.afterBackup?.(index, entry.target);
-      await linkFileNoClobber(entry.staged, entry.target);
-      entry.stagedInstalled = true;
-      await fs.remove(entry.staged);
+      await assertParentIdentitiesUnchanged(entry);
+      if (entry.staged) {
+        if (!entry.stagedIdentity || entry.mutation.delete) {
+          throw new Error(`事务写入缺少可信暂存快照: ${entry.target}`);
+        }
+        const stagedSha256 = sha256(
+          Buffer.isBuffer(entry.mutation.content)
+            ? entry.mutation.content
+            : Buffer.from(entry.mutation.content)
+        );
+        await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+        if (
+          await verifiedFileSha256(entry.staged, entry.stagedIdentity, '事务暂存安装') !==
+          stagedSha256
+        ) {
+          throw new Error(`事务暂存快照哈希不匹配: ${entry.staged}`);
+        }
+        await linkFileNoClobber(entry.staged, entry.target);
+        entry.stagedInstalled = true;
+        await assertInstalledIdentity(entry);
+        await assertParentIdentitiesUnchanged(entry);
+        await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+        if (
+          await verifiedFileSha256(entry.staged, entry.stagedIdentity, '事务暂存安装') !==
+          stagedSha256
+        ) {
+          throw new Error(`事务暂存快照在安装期间被修改: ${entry.staged}`);
+        }
+        await unlinkVerifiedFile(
+          entry.staged,
+          entry.stagedIdentity,
+          stagedSha256,
+          '事务暂存快照清理'
+        );
+        await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+      }
     }
     for (const entry of entries) {
-      if (entry.stagedInstalled && !(await targetMatchesWrite(entry))) {
+      if (
+        (entry.stagedInstalled && !(await targetMatchesWrite(entry))) ||
+        (entry.mutation.delete && await pathExistsWithLstat(entry.target))
+      ) {
         throw new FileTransactionPreconditionError(
           entry.target,
           `事务目标在提交完成前发生变化: ${entry.target}`
         );
       }
     }
+    journal = { ...journal, phase: 'committed' };
+    await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+    await writeTransactionJournal(transactionRoot, journal);
+    await assertTransactionWorkspaceUnchanged(workspaceIdentity);
   } catch (error) {
     try {
       await restoreEntries(entries);
+      if (workspaceIdentity) {
+        await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+      }
     } catch (rollbackError) {
       recoveryCompleted = false;
+      if (rollbackError instanceof FileTransactionRollbackConflictError && journal) {
+        try {
+          journal = { ...journal, phase: 'conflicted' };
+          if (workspaceIdentity) {
+            await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+          }
+          await writeTransactionJournal(transactionRoot, journal);
+          if (workspaceIdentity) {
+            await assertTransactionWorkspaceUnchanged(workspaceIdentity);
+          }
+        } catch (journalError) {
+          throw new Error(
+            `${getErrorMessage(error)}；自动恢复检测到并发修改，且无法持久化冲突状态：` +
+            `${getErrorMessage(journalError)}；恢复快照保留在 ${transactionRoot}`
+          );
+        }
+      }
       throw new Error(
         `${getErrorMessage(error)}；自动恢复失败：${getErrorMessage(rollbackError)}；` +
         `恢复快照保留在 ${transactionRoot}`
@@ -141,21 +323,998 @@ export async function commitFileTransaction(
     }
     throw error;
   } finally {
-    if (recoveryCompleted) {
-      try {
-        await fs.remove(transactionRoot);
+    try {
+      if (recoveryCompleted && workspaceIdentity) {
+        cleanupRoot = path.join(
+          workspaceIdentity.transactionsRoot.target,
+          `.cleanup-complete-${process.pid}-` +
+          `${processIdentityHash(currentProcessIdentity)}-${randomUUID()}`
+        );
+        if (!await claimTransactionDirectory(
+          workspaceIdentity.transactionsRoot,
+          workspaceIdentity.transactionRoot,
+          transactionRoot,
+          cleanupRoot
+        )) {
+          throw new Error(`事务快照在进入清理阶段前消失: ${transactionRoot}`);
+        }
+        activeTransactionRoots.delete(transactionRoot);
+        activeRecoveryRoots.add(path.resolve(cleanupRoot));
+        await removeClaimedTransactionDirectory(
+          workspaceIdentity.transactionsRoot,
+          workspaceIdentity.transactionRoot,
+          cleanupRoot
+        );
         await removeInitiallyMissingEmptyDirectories(initiallyMissingDirectories);
-      } catch {
-        // 提交已经完成；清理残留快照不应把成功操作伪装成事务失败。
+      }
+    } finally {
+      activeTransactionRoots.delete(transactionRoot);
+      if (cleanupRoot) {
+        activeRecoveryRoots.delete(path.resolve(cleanupRoot));
       }
     }
   }
 }
 
-function assertUniqueTargets(writes: FileWrite[]): void {
+async function createTransactionWorkspace(
+  root: string,
+  transactionRoot: string
+): Promise<TransactionWorkspaceIdentity> {
+  const transactionsRoot = path.dirname(transactionRoot);
+  await assertUsableParent(root, transactionRoot);
+  await fs.ensureDir(transactionsRoot);
+  await assertUsableParent(root, transactionRoot);
+  const transactionsRootStat = await fs.lstat(transactionsRoot);
+  if (transactionsRootStat.isSymbolicLink() || !transactionsRootStat.isDirectory()) {
+    throw new Error(`事务工作根目录不是可信目录: ${transactionsRoot}`);
+  }
+  const transactionsRootIdentity: DirectoryIdentity = {
+    target: transactionsRoot,
+    dev: transactionsRootStat.dev,
+    ino: transactionsRootStat.ino,
+  };
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务工作根目录');
+  await fs.mkdir(transactionRoot);
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务工作根目录');
+  const transactionRootStat = await fs.lstat(transactionRoot);
+  if (transactionRootStat.isSymbolicLink() || !transactionRootStat.isDirectory()) {
+    throw new Error(`事务工作目录不是可信目录: ${transactionRoot}`);
+  }
+  const transactionRootIdentity: DirectoryIdentity = {
+    target: transactionRoot,
+    dev: transactionRootStat.dev,
+    ino: transactionRootStat.ino,
+  };
+  await assertDirectoryIdentityUnchanged(transactionRootIdentity, '事务工作目录');
+  return {
+    transactionsRoot: transactionsRootIdentity,
+    transactionRoot: transactionRootIdentity,
+  };
+}
+
+async function assertTransactionWorkspaceUnchanged(
+  workspace: TransactionWorkspaceIdentity
+): Promise<void> {
+  await assertDirectoryIdentityUnchanged(workspace.transactionsRoot, '事务工作根目录');
+  await assertDirectoryIdentityUnchanged(workspace.transactionRoot, '事务工作目录');
+}
+
+async function createTransactionJournal(
+  entries: TransactionEntry[],
+  initiallyMissingDirectories: string[]
+): Promise<TransactionJournal> {
+  const processIdentity = await getProcessIdentity(process.pid);
+  if (processIdentity.status !== 'found') {
+    throw new Error(`无法读取事务进程启动身份: ${process.pid}`);
+  }
+  return {
+    schemaVersion: 1,
+    phase: 'prepared',
+    owner: {
+      pid: process.pid,
+      processStartedAt: processIdentity.identity,
+    },
+    initiallyMissingDirectories,
+    entries: entries.map((entry) => {
+      if (!entry.mutation.delete && !entry.stagedIdentity) {
+        throw new Error(`事务写入缺少暂存文件身份: ${entry.target}`);
+      }
+      return {
+        target: entry.target,
+        kind: entry.mutation.delete ? 'delete' : 'write',
+        existed: entry.existed,
+        originalSha256: entry.original ? sha256(entry.original) : null,
+        writtenSha256: entry.mutation.delete
+          ? null
+          : sha256(
+              Buffer.isBuffer(entry.mutation.content)
+                ? entry.mutation.content
+                : Buffer.from(entry.mutation.content)
+            ),
+        writtenIdentity: entry.mutation.delete ? null : entry.stagedIdentity,
+        parentIdentities: entry.parentIdentities,
+      };
+    }),
+  };
+}
+
+async function writeTransactionJournal(
+  transactionRoot: string,
+  journal: TransactionJournal
+): Promise<void> {
+  await fs.ensureDir(transactionRoot);
+  const target = path.join(transactionRoot, TRANSACTION_JOURNAL);
+  const temporary = path.join(transactionRoot, `${TRANSACTION_JOURNAL}.${randomUUID()}.tmp`);
+  await fs.writeFile(temporary, `${JSON.stringify(journal, null, 2)}\n`, { flag: 'wx' });
+  await fs.rename(temporary, target);
+}
+
+export async function recoverInterruptedFileTransactions(root: string): Promise<void> {
+  root = path.resolve(root);
+  const transactionsRoot = path.join(root, '.alskai-notebank', 'transactions');
+  assertInsideRoot(root, transactionsRoot);
+  await assertUsableParent(root, transactionsRoot);
+
+  let rootStat: fs.Stats;
+  try {
+    rootStat = await fs.lstat(transactionsRoot);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return;
+    }
+    throw error;
+  }
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
+    throw new Error(`事务恢复目录不是可信目录: ${transactionsRoot}`);
+  }
+  const transactionsRootIdentity: DirectoryIdentity = {
+    target: transactionsRoot,
+    dev: rootStat.dev,
+    ino: rootStat.ino,
+  };
+
+  const currentProcessIdentity = await requireCurrentProcessIdentity();
+  const currentIdentityHash = processIdentityHash(currentProcessIdentity);
+  const cleanupDirectories = new Set<string>();
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+  const candidates = await fs.readdir(transactionsRoot, { withFileTypes: true });
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+  for (const candidate of candidates) {
+    const transactionRoot = path.join(transactionsRoot, candidate.name);
+    await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+    let candidateStat: fs.Stats;
+    try {
+      candidateStat = await fs.lstat(transactionRoot);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+    await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+    if (
+      candidate.isSymbolicLink() ||
+      !candidate.isDirectory() ||
+      candidateStat.isSymbolicLink() ||
+      !candidateStat.isDirectory()
+    ) {
+      throw new Error(`事务恢复目录包含不安全条目: ${transactionRoot}`);
+    }
+    const transactionIdentity: DirectoryIdentity = {
+      target: transactionRoot,
+      dev: candidateStat.dev,
+      ino: candidateStat.ino,
+    };
+    if (candidate.name.startsWith('.cleanup-complete-')) {
+      if (!isCleanupCompleteTransactionName(candidate.name)) {
+        throw new Error(`已完成事务清理目录名称无效: ${transactionRoot}`);
+      }
+      await removeClaimedTransactionDirectory(
+        transactionsRootIdentity,
+        transactionIdentity,
+        transactionRoot
+      );
+      continue;
+    }
+    const recoveryOwner = recoveryClaimOwner(candidate.name);
+    if (candidate.name.startsWith('.recovering-')) {
+      if (!recoveryOwner) {
+        throw new Error(`事务恢复认领目录名称无效: ${transactionRoot}`);
+      }
+      if (await recoveryClaimMayBeActive(recoveryOwner, transactionRoot)) {
+        continue;
+      }
+    }
+    const journal = await readTransactionJournal(transactionRoot);
+    await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+    await assertDirectoryIdentityUnchanged(transactionIdentity, '事务快照目录');
+    if (!journal) {
+      if (candidate.name.startsWith('.recovering-')) {
+        throw new Error(`恢复认领目录缺少事务日志，快照已保留: ${transactionRoot}`);
+      }
+      const directoryOwner = transactionDirectoryOwner(candidate.name);
+      if (!directoryOwner) {
+        throw new Error(`无事务日志的恢复目录名称无效: ${candidate.name}`);
+      }
+      if (await transactionDirectoryMayBeActive(directoryOwner, transactionRoot)) {
+        continue;
+      }
+      if (directoryOwner.identityHash === null) {
+        throw new Error(`检测到旧版无日志事务快照，拒绝自动清理: ${transactionRoot}`);
+      }
+      const cleanupRoot = path.join(
+        transactionsRoot,
+        `.cleanup-complete-${process.pid}-${currentIdentityHash}-${randomUUID()}`
+      );
+      if (!await claimTransactionDirectory(
+        transactionsRootIdentity,
+        transactionIdentity,
+        transactionRoot,
+        cleanupRoot
+      )) {
+        continue;
+      }
+      activeRecoveryRoots.add(path.resolve(cleanupRoot));
+      try {
+        await removeClaimedTransactionDirectory(
+          transactionsRootIdentity,
+          transactionIdentity,
+          cleanupRoot
+        );
+      } finally {
+        activeRecoveryRoots.delete(path.resolve(cleanupRoot));
+      }
+      continue;
+    }
+    validateTransactionJournal(root, journal);
+    if (journal.phase === 'conflicted') {
+      continue;
+    }
+    if (await journalOwnerMayBeActive(journal.owner, transactionRoot)) {
+      continue;
+    }
+    await assertNoProtectedRecoveryArtifacts(transactionRoot);
+    await validateRecoveryQuarantineDirectory(transactionRoot, journal.entries.length);
+
+    const claimedRoot = path.join(
+      transactionsRoot,
+      `.recovering-${sha256(Buffer.from(candidate.name)).slice(0, 16)}-` +
+      `${process.pid}-${currentIdentityHash}-${randomUUID()}`
+    );
+    if (!await claimTransactionDirectory(
+      transactionsRootIdentity,
+      transactionIdentity,
+      transactionRoot,
+      claimedRoot
+    )) {
+      continue;
+    }
+
+    activeRecoveryRoots.add(path.resolve(claimedRoot));
+    let completedCleanupRoot: string | null = null;
+    try {
+      await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+      await assertDirectoryIdentityUnchanged(
+        { ...transactionIdentity, target: claimedRoot },
+        '已认领事务快照'
+      );
+      await assertNoProtectedRecoveryArtifacts(claimedRoot);
+      await validateRecoveryQuarantineDirectory(claimedRoot, journal.entries.length);
+      const claimedJournal: TransactionJournal = {
+        ...journal,
+        owner: {
+          pid: process.pid,
+          processStartedAt: currentProcessIdentity,
+        },
+      };
+      await writeTransactionJournal(claimedRoot, claimedJournal);
+      if (claimedJournal.phase === 'prepared') {
+        await restoreJournalEntries(root, claimedRoot, claimedJournal);
+      }
+      await assertNoProtectedRecoveryArtifacts(claimedRoot);
+      await validateRecoveryQuarantineDirectory(claimedRoot, claimedJournal.entries.length);
+      const cleanupRoot = path.join(
+        transactionsRoot,
+        `.cleanup-complete-${process.pid}-${currentIdentityHash}-${randomUUID()}`
+      );
+      if (!await claimTransactionDirectory(
+        transactionsRootIdentity,
+        transactionIdentity,
+        claimedRoot,
+        cleanupRoot
+      )) {
+        throw new Error(`已恢复事务快照在进入清理阶段前消失: ${claimedRoot}`);
+      }
+      completedCleanupRoot = cleanupRoot;
+      activeRecoveryRoots.delete(path.resolve(claimedRoot));
+      activeRecoveryRoots.add(path.resolve(cleanupRoot));
+      await removeClaimedTransactionDirectory(
+        transactionsRootIdentity,
+        transactionIdentity,
+        cleanupRoot
+      );
+      for (const directory of claimedJournal.initiallyMissingDirectories) {
+        cleanupDirectories.add(directory);
+      }
+    } catch (error) {
+      if (completedCleanupRoot) {
+        throw new Error(
+          `文件事务已经恢复，但快照清理未完成：${getErrorMessage(error)}；` +
+          `可续清理快照保留在 ${completedCleanupRoot}`
+        );
+      }
+      let snapshotRoot = claimedRoot;
+      let releaseError: unknown;
+      try {
+        await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+        await assertDirectoryIdentityUnchanged(
+          { ...transactionIdentity, target: claimedRoot },
+          '失败事务快照'
+        );
+        await writeTransactionJournal(claimedRoot, journal);
+        const pendingRoot = path.join(
+          transactionsRoot,
+          `.pending-${sha256(Buffer.from(candidate.name)).slice(0, 16)}-${randomUUID()}`
+        );
+        if (!await claimTransactionDirectory(
+          transactionsRootIdentity,
+          transactionIdentity,
+          claimedRoot,
+          pendingRoot
+        )) {
+          throw new Error(`失败事务快照在释放认领时消失: ${claimedRoot}`);
+        }
+        snapshotRoot = pendingRoot;
+      } catch (claimReleaseError) {
+        releaseError = claimReleaseError;
+      }
+      throw new Error(
+        `无法恢复中断的文件事务 ${claimedRoot}：${getErrorMessage(error)}；` +
+        `恢复快照已保留在 ${snapshotRoot}` +
+        (releaseError ? `；释放恢复认领失败：${getErrorMessage(releaseError)}` : '')
+      );
+    } finally {
+      activeRecoveryRoots.delete(path.resolve(claimedRoot));
+      if (completedCleanupRoot) {
+        activeRecoveryRoots.delete(path.resolve(completedCleanupRoot));
+      }
+    }
+  }
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+  await removeInitiallyMissingEmptyDirectories(
+    [...cleanupDirectories].sort((left, right) => right.length - left.length)
+  );
+}
+
+function isCleanupCompleteTransactionName(name: string): boolean {
+  return /^\.cleanup-complete-\d+-[0-9a-f]{64}-[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(name);
+}
+
+async function claimTransactionDirectory(
+  transactionsRootIdentity: DirectoryIdentity,
+  transactionIdentity: DirectoryIdentity,
+  source: string,
+  destination: string
+): Promise<boolean> {
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+  await assertDirectoryIdentityUnchanged(
+    { ...transactionIdentity, target: source },
+    '待认领事务快照'
+  );
+  try {
+    await fs.rename(source, destination);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+  await assertDirectoryIdentityUnchanged(
+    { ...transactionIdentity, target: destination },
+    '已认领事务快照'
+  );
+  return true;
+}
+
+async function removeClaimedTransactionDirectory(
+  transactionsRootIdentity: DirectoryIdentity,
+  transactionIdentity: DirectoryIdentity,
+  claimedRoot: string
+): Promise<void> {
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+  await assertDirectoryIdentityUnchanged(
+    { ...transactionIdentity, target: claimedRoot },
+    '待清理事务快照'
+  );
+  await fs.remove(claimedRoot);
+  await assertDirectoryIdentityUnchanged(transactionsRootIdentity, '事务恢复根目录');
+}
+
+async function assertDirectoryIdentityUnchanged(
+  identity: DirectoryIdentity,
+  label: string
+): Promise<void> {
+  let stat: fs.Stats;
+  try {
+    stat = await fs.lstat(identity.target);
+  } catch (error) {
+    throw new Error(`${label}在操作期间消失: ${identity.target}（${getErrorMessage(error)}）`);
+  }
+  if (
+    stat.isSymbolicLink() ||
+    !stat.isDirectory() ||
+    stat.dev !== identity.dev ||
+    stat.ino !== identity.ino
+  ) {
+    throw new Error(`${label}在操作期间被替换: ${identity.target}`);
+  }
+}
+
+async function readTransactionJournal(
+  transactionRoot: string
+): Promise<TransactionJournal | null> {
+  const target = path.join(transactionRoot, TRANSACTION_JOURNAL);
+  let stat: fs.Stats;
+  try {
+    stat = await fs.lstat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`事务日志不是可信文件: ${target}`);
+  }
+  try {
+    return JSON.parse(await fs.readFile(target, 'utf8')) as TransactionJournal;
+  } catch (error) {
+    throw new Error(`事务日志无法解析: ${target}（${getErrorMessage(error)}）`);
+  }
+}
+
+function validateTransactionJournal(root: string, journal: TransactionJournal): void {
+  if (
+    journal.schemaVersion !== 1 ||
+    (
+      journal.phase !== 'prepared' &&
+      journal.phase !== 'committed' &&
+      journal.phase !== 'conflicted'
+    ) ||
+    !journal.owner ||
+    !Number.isSafeInteger(journal.owner.pid) ||
+    journal.owner.pid <= 0 ||
+    typeof journal.owner.processStartedAt !== 'string' ||
+    journal.owner.processStartedAt.length === 0 ||
+    !Array.isArray(journal.initiallyMissingDirectories) ||
+    !Array.isArray(journal.entries)
+  ) {
+    throw new Error('事务日志结构无效');
+  }
   const targets = new Set<string>();
-  for (const write of writes) {
-    const target = path.resolve(write.target);
+  for (const directory of journal.initiallyMissingDirectories) {
+    if (typeof directory !== 'string') {
+      throw new Error('事务日志包含无效目录');
+    }
+    assertInsideRoot(root, directory);
+  }
+  for (const entry of journal.entries) {
+    if (
+      !entry ||
+      typeof entry.target !== 'string' ||
+      (entry.kind !== 'write' && entry.kind !== 'delete') ||
+      typeof entry.existed !== 'boolean' ||
+      !isNullableSha256(entry.originalSha256) ||
+      !isNullableSha256(entry.writtenSha256) ||
+      !isNullableFileIdentity(entry.writtenIdentity) ||
+      !Array.isArray(entry.parentIdentities)
+    ) {
+      throw new Error('事务日志包含无效条目');
+    }
+    assertInsideRoot(root, entry.target);
+    const resolvedTarget = path.resolve(entry.target);
+    if (targets.has(resolvedTarget)) {
+      throw new Error(`事务日志目标重复: ${entry.target}`);
+    }
+    targets.add(resolvedTarget);
+    if (entry.existed !== (entry.originalSha256 !== null)) {
+      throw new Error(`事务日志原始哈希与存在状态不一致: ${entry.target}`);
+    }
+    if ((entry.kind === 'delete') !== (entry.writtenSha256 === null)) {
+      throw new Error(`事务日志写入哈希与操作类型不一致: ${entry.target}`);
+    }
+    if ((entry.kind === 'delete') !== (entry.writtenIdentity === null)) {
+      throw new Error(`事务日志写入身份与操作类型不一致: ${entry.target}`);
+    }
+    for (const identity of entry.parentIdentities) {
+      if (
+        !identity ||
+        typeof identity.target !== 'string' ||
+        !Number.isSafeInteger(identity.dev) ||
+        !Number.isSafeInteger(identity.ino)
+      ) {
+        throw new Error(`事务日志包含无效父路径身份: ${entry.target}`);
+      }
+      assertInsideRoot(root, identity.target);
+    }
+  }
+}
+
+function isNullableSha256(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && /^[a-f0-9]{64}$/.test(value));
+}
+
+function isNullableFileIdentity(value: unknown): value is FileIdentity | null {
+  if (value === null) {
+    return true;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const identity = value as Record<string, unknown>;
+  return Number.isSafeInteger(identity.dev) &&
+    Number(identity.dev) >= 0 &&
+    Number.isSafeInteger(identity.ino) &&
+    Number(identity.ino) > 0;
+}
+
+async function assertNoProtectedRecoveryArtifacts(transactionRoot: string): Promise<void> {
+  for (const directoryName of ['conflicts', 'rollback']) {
+    const directory = path.join(transactionRoot, directoryName);
+    let stat: fs.Stats;
+    try {
+      stat = await fs.lstat(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error(`事务恢复证据目录不是可信目录: ${directory}`);
+    }
+    if ((await fs.readdir(directory)).length > 0) {
+      throw new Error(`事务恢复检测到待人工处理的证据，拒绝自动清理: ${directory}`);
+    }
+  }
+}
+
+async function validateRecoveryQuarantineDirectory(
+  transactionRoot: string,
+  entryCount: number
+): Promise<void> {
+  const directory = path.join(transactionRoot, 'recovery-quarantine');
+  let stat: fs.Stats;
+  try {
+    stat = await fs.lstat(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return;
+    }
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error(`事务恢复隔离目录不是可信目录: ${directory}`);
+  }
+  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    if (!/^(0|[1-9]\d*)$/.test(entry.name)) {
+      throw new Error(`事务恢复隔离目录包含未知条目: ${path.join(directory, entry.name)}`);
+    }
+    const index = Number(entry.name);
+    if (
+      !Number.isSafeInteger(index) ||
+      index < 0 ||
+      index >= entryCount ||
+      entry.isSymbolicLink() ||
+      !entry.isFile()
+    ) {
+      throw new Error(`事务恢复隔离目录包含不安全条目: ${path.join(directory, entry.name)}`);
+    }
+  }
+}
+
+async function reconcileJournalQuarantine(
+  root: string,
+  entry: TransactionJournalEntry,
+  transactionRoot: string,
+  index: number
+): Promise<void> {
+  const quarantine = recoveryQuarantinePath(transactionRoot, index);
+  if (!(await pathExistsWithLstat(quarantine))) {
+    return;
+  }
+  const quarantineStat = await fs.lstat(quarantine);
+  if (quarantineStat.isSymbolicLink() || !quarantineStat.isFile()) {
+    throw new Error(`事务恢复隔离文件不是普通文件: ${quarantine}`);
+  }
+  const quarantineIdentity = fileIdentity(quarantineStat);
+  const quarantineSha256 = await regularFileSha256(quarantine);
+  if (!quarantineSha256) {
+    throw new Error(`事务恢复隔离文件无法读取: ${quarantine}`);
+  }
+
+  if (await pathExistsWithLstat(entry.target)) {
+    const targetStat = await fs.lstat(entry.target);
+    if (targetStat.isSymbolicLink() || !targetStat.isFile()) {
+      throw new Error(`隔离恢复目标不是普通文件: ${entry.target}`);
+    }
+    if (sameFileIdentity(targetStat, quarantineIdentity)) {
+      await unlinkVerifiedFile(
+        quarantine,
+        quarantineIdentity,
+        quarantineSha256,
+        '重复隔离链接清理'
+      );
+      return;
+    }
+    const targetSha256 = await regularFileSha256(entry.target);
+    if (
+      entry.writtenIdentity &&
+      sameFileIdentity(quarantineStat, entry.writtenIdentity) &&
+      entry.writtenSha256 === quarantineSha256 &&
+      entry.originalSha256 !== null &&
+      targetSha256 === entry.originalSha256
+    ) {
+      await unlinkVerifiedFile(
+        quarantine,
+        entry.writtenIdentity,
+        entry.writtenSha256,
+        '已恢复事务输出清理'
+      );
+      return;
+    }
+    throw new Error(
+      `事务恢复隔离文件与现有目标均可能包含人工内容: ${quarantine}, ${entry.target}`
+    );
+  }
+
+  await assertJournalParentIdentities(entry);
+  await assertUsableParent(root, entry.target);
+  await fs.ensureDir(path.dirname(entry.target));
+  await installVerifiedHardLinkAndRetireSource(
+    quarantine,
+    entry.target,
+    async () => {
+      await assertJournalParentIdentities(entry);
+      await assertUsableParent(root, entry.target);
+    },
+    '事务恢复隔离文件归还',
+    quarantineIdentity,
+    quarantineSha256
+  );
+}
+
+function recoveryQuarantinePath(transactionRoot: string, index: number): string {
+  return path.join(transactionRoot, 'recovery-quarantine', String(index));
+}
+
+async function restoreJournalEntries(
+  root: string,
+  transactionRoot: string,
+  journal: TransactionJournal
+): Promise<void> {
+  await validateRecoveryQuarantineDirectory(transactionRoot, journal.entries.length);
+  for (let index = journal.entries.length - 1; index >= 0; index -= 1) {
+    const entry = journal.entries[index];
+    await assertJournalParentIdentities(entry);
+    await assertUsableParent(root, entry.target);
+    await reconcileJournalQuarantine(root, entry, transactionRoot, index);
+    const backup = path.join(transactionRoot, 'backup', String(index));
+    const backupExists = await pathExistsWithLstat(backup);
+
+    if (!entry.existed) {
+      if (backupExists) {
+        throw new Error(`原本不存在的目标出现了异常备份: ${entry.target}`);
+      }
+      await removeInterruptedWrite(root, entry, transactionRoot, index);
+      continue;
+    }
+
+    if (!entry.originalSha256) {
+      throw new Error(`事务日志缺少原始哈希: ${entry.target}`);
+    }
+    if (!backupExists) {
+      if (!(await fileMatchesSha256(entry.target, entry.originalSha256))) {
+        throw new Error(`目标与原始快照均无法用于恢复: ${entry.target}`);
+      }
+      continue;
+    }
+    if (!(await fileMatchesSha256(backup, entry.originalSha256))) {
+      throw new Error(`事务备份哈希不匹配: ${backup}`);
+    }
+
+    if (await pathExistsWithLstat(entry.target)) {
+      const currentSha256 = await regularFileSha256(entry.target);
+      if (currentSha256 === entry.originalSha256) {
+        await unlinkVerifiedFile(
+          backup,
+          undefined,
+          entry.originalSha256,
+          '重复原始备份清理'
+        );
+        continue;
+      }
+      if (!entry.writtenSha256 || currentSha256 !== entry.writtenSha256) {
+        throw new Error(`目标在事务中断后被人工修改: ${entry.target}`);
+      }
+      const quarantine = await quarantineJournalTarget(
+        root,
+        entry,
+        transactionRoot,
+        index,
+        entry.writtenSha256
+      );
+      await assertJournalParentIdentities(entry);
+      await assertUsableParent(root, entry.target);
+      await fs.ensureDir(path.dirname(entry.target));
+      await installVerifiedHardLinkAndRetireSource(
+        backup,
+        entry.target,
+        async () => {
+          await assertJournalParentIdentities(entry);
+          await assertUsableParent(root, entry.target);
+        },
+        '事务原始备份恢复',
+        undefined,
+        entry.originalSha256
+      );
+      await unlinkVerifiedFile(
+        quarantine,
+        entry.writtenIdentity ?? undefined,
+        entry.writtenSha256,
+        '已恢复事务输出清理'
+      );
+      continue;
+    }
+    await assertJournalParentIdentities(entry);
+    await assertUsableParent(root, entry.target);
+    await fs.ensureDir(path.dirname(entry.target));
+    await installVerifiedHardLinkAndRetireSource(
+      backup,
+      entry.target,
+      async () => {
+        await assertJournalParentIdentities(entry);
+        await assertUsableParent(root, entry.target);
+      },
+      '事务原始备份恢复',
+      undefined,
+      entry.originalSha256
+    );
+  }
+}
+
+async function removeInterruptedWrite(
+  root: string,
+  entry: TransactionJournalEntry,
+  transactionRoot: string,
+  index: number
+): Promise<void> {
+  if (!(await pathExistsWithLstat(entry.target))) {
+    return;
+  }
+  if (!entry.writtenSha256) {
+    throw new Error(`新目标在事务中断后被人工修改: ${entry.target}`);
+  }
+  const quarantine = await quarantineJournalTarget(
+    root,
+    entry,
+    transactionRoot,
+    index,
+    entry.writtenSha256
+  );
+  await unlinkVerifiedFile(
+    quarantine,
+    entry.writtenIdentity ?? undefined,
+    entry.writtenSha256,
+    '中断事务输出清理'
+  );
+}
+
+async function quarantineJournalTarget(
+  root: string,
+  entry: TransactionJournalEntry,
+  transactionRoot: string,
+  index: number,
+  expectedSha256: string
+): Promise<string> {
+  if (!entry.writtenIdentity) {
+    throw new Error(`事务日志缺少写入文件身份: ${entry.target}`);
+  }
+  const stat = await fs.lstat(entry.target);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`恢复目标不是普通文件: ${entry.target}`);
+  }
+  const identity = fileIdentity(stat);
+  if (!sameFileIdentity(stat, entry.writtenIdentity)) {
+    throw new Error(`恢复目标已被其他操作替换: ${entry.target}`);
+  }
+  const quarantine = recoveryQuarantinePath(transactionRoot, index);
+  await fs.ensureDir(path.dirname(quarantine));
+  if (await pathExistsWithLstat(quarantine)) {
+    throw new Error(`事务恢复隔离文件已经存在: ${quarantine}`);
+  }
+  await fs.move(entry.target, quarantine);
+  const quarantinedStat = await fs.lstat(quarantine);
+  if (!sameFileIdentity(quarantinedStat, identity)) {
+    await restoreUnexpectedMovedFile(quarantine, entry.target, quarantinedStat);
+    throw new Error(`恢复期间事务目标父路径被替换: ${entry.target}`);
+  }
+  await assertJournalParentIdentities(entry);
+  const quarantinedSha256 = await regularFileSha256(quarantine);
+  if (!quarantinedSha256) {
+    throw new Error(`事务恢复隔离文件无法读取: ${quarantine}`);
+  }
+  if (quarantinedSha256 !== expectedSha256) {
+    await installVerifiedHardLinkAndRetireSource(
+      quarantine,
+      entry.target,
+      async () => {
+        await assertJournalParentIdentities(entry);
+        await assertUsableParent(root, entry.target);
+      },
+      '人工修改隔离文件归还',
+      identity,
+      quarantinedSha256
+    );
+    throw new Error(`目标在事务恢复认领时被人工修改: ${entry.target}`);
+  }
+  return quarantine;
+}
+
+async function assertJournalParentIdentities(entry: TransactionJournalEntry): Promise<void> {
+  for (const identity of entry.parentIdentities) {
+    let stat: fs.Stats;
+    try {
+      stat = await fs.lstat(identity.target);
+    } catch (error) {
+      throw new Error(
+        `事务目标父路径在恢复前消失: ${identity.target}（${getErrorMessage(error)}）`
+      );
+    }
+    if (
+      stat.isSymbolicLink() ||
+      !stat.isDirectory() ||
+      stat.dev !== identity.dev ||
+      stat.ino !== identity.ino
+    ) {
+      throw new Error(`事务目标父路径在恢复前被替换: ${identity.target}`);
+    }
+  }
+}
+
+async function fileMatchesSha256(target: string, expected: string): Promise<boolean> {
+  return await regularFileSha256(target) === expected;
+}
+
+async function regularFileSha256(target: string): Promise<string | null> {
+  let stat: fs.Stats;
+  try {
+    stat = await fs.lstat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    return null;
+  }
+  return sha256(await fs.readFile(target));
+}
+
+function sha256(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+async function requireCurrentProcessIdentity(): Promise<string> {
+  const identity = await getProcessIdentity(process.pid);
+  if (identity.status !== 'found') {
+    throw new Error(`无法读取当前进程启动身份: ${process.pid}`);
+  }
+  return identity.identity;
+}
+
+function processIdentityHash(identity: string): string {
+  return sha256(Buffer.from(identity));
+}
+
+async function transactionDirectoryMayBeActive(
+  owner: RecoveryClaimOwner,
+  transactionRoot: string
+): Promise<boolean> {
+  if (owner.pid === process.pid) {
+    return activeTransactionRoots.has(path.resolve(transactionRoot));
+  }
+  const identity = await getProcessIdentity(owner.pid, { fresh: true });
+  if (identity.status === 'unknown') {
+    return true;
+  }
+  if (identity.status === 'missing') {
+    return false;
+  }
+  return owner.identityHash === null ||
+    processIdentityHash(identity.identity) === owner.identityHash;
+}
+
+function transactionDirectoryOwner(name: string): RecoveryClaimOwner | null {
+  const current = name.match(/^(\d+)-([0-9a-f]{64})-[0-9a-f]{8}-[0-9a-f-]{27}$/i);
+  if (current) {
+    const pid = Number.parseInt(current[1], 10);
+    return Number.isSafeInteger(pid) && pid > 0
+      ? { pid, identityHash: current[2].toLowerCase() }
+      : null;
+  }
+  const legacy = name.match(/^(\d+)-[0-9a-f]{8}-[0-9a-f-]{27}$/i);
+  if (!legacy) {
+    return null;
+  }
+  const pid = Number.parseInt(legacy[1], 10);
+  return Number.isSafeInteger(pid) && pid > 0
+    ? { pid, identityHash: null }
+    : null;
+}
+
+function recoveryClaimOwner(name: string): RecoveryClaimOwner | null {
+  if (!name.startsWith('.recovering-')) {
+    return null;
+  }
+  const current = name.match(
+    /-(\d+)-([0-9a-f]{64})-[0-9a-f]{8}-[0-9a-f-]{27}$/i
+  );
+  if (current) {
+    const pid = Number.parseInt(current[1], 10);
+    return Number.isSafeInteger(pid) && pid > 0
+      ? { pid, identityHash: current[2].toLowerCase() }
+      : null;
+  }
+  const legacy = name.match(/-(\d+)-[0-9a-f]{8}-[0-9a-f-]{27}$/i);
+  if (!legacy) {
+    return null;
+  }
+  const pid = Number.parseInt(legacy[1], 10);
+  return Number.isSafeInteger(pid) && pid > 0
+    ? { pid, identityHash: null }
+    : null;
+}
+
+async function recoveryClaimMayBeActive(
+  owner: RecoveryClaimOwner,
+  transactionRoot: string
+): Promise<boolean> {
+  if (owner.pid === process.pid) {
+    return activeRecoveryRoots.has(path.resolve(transactionRoot));
+  }
+  const identity = await getProcessIdentity(owner.pid, { fresh: true });
+  if (identity.status === 'unknown') {
+    return true;
+  }
+  if (identity.status === 'missing') {
+    return false;
+  }
+  return owner.identityHash === null ||
+    processIdentityHash(identity.identity) === owner.identityHash;
+}
+
+async function journalOwnerMayBeActive(
+  owner: TransactionJournal['owner'],
+  transactionRoot: string
+): Promise<boolean> {
+  if (owner.pid === process.pid) {
+    const resolvedRoot = path.resolve(transactionRoot);
+    return activeTransactionRoots.has(resolvedRoot) || activeRecoveryRoots.has(resolvedRoot);
+  }
+  const identity = await getProcessIdentity(owner.pid, { fresh: true });
+  if (identity.status === 'unknown') {
+    return true;
+  }
+  return identity.status === 'found' && identity.identity === owner.processStartedAt;
+}
+
+function assertUniqueTargets(mutations: FileMutation[]): void {
+  const targets = new Set<string>();
+  for (const mutation of mutations) {
+    const target = path.resolve(mutation.target);
     if (targets.has(target)) {
       throw new Error(`事务目标重复: ${target}`);
     }
@@ -172,8 +1331,8 @@ function assertInsideRoot(root: string, target: string): void {
 
 async function assertUsableParent(root: string, target: string): Promise<void> {
   const resolvedRoot = path.resolve(root);
-  const rootStat = await fs.stat(resolvedRoot);
-  if (!rootStat.isDirectory()) {
+  const rootStat = await fs.lstat(resolvedRoot);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
     throw new Error(`事务根路径不是目录: ${resolvedRoot}`);
   }
   const relativeParent = path.relative(resolvedRoot, path.dirname(path.resolve(target)));
@@ -193,6 +1352,61 @@ async function assertUsableParent(root: string, target: string): Promise<void> {
         return;
       }
       throw error;
+    }
+  }
+}
+
+async function captureParentIdentities(
+  root: string,
+  target: string
+): Promise<DirectoryIdentity[]> {
+  const resolvedRoot = path.resolve(root);
+  const relativeParent = path.relative(resolvedRoot, path.dirname(path.resolve(target)));
+  const candidates = [resolvedRoot];
+  let current = resolvedRoot;
+  for (const segment of relativeParent.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    candidates.push(current);
+  }
+  const identities: DirectoryIdentity[] = [];
+  for (const candidate of candidates) {
+    try {
+      const stat = await fs.lstat(candidate);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) {
+        throw new Error(`事务目标父路径不能是符号链接或非目录: ${candidate}`);
+      }
+      identities.push({ target: candidate, dev: stat.dev, ino: stat.ino });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        break;
+      }
+      throw error;
+    }
+  }
+  return identities;
+}
+
+async function assertParentIdentitiesUnchanged(entry: TransactionEntry): Promise<void> {
+  for (const identity of entry.parentIdentities) {
+    let stat: fs.Stats;
+    try {
+      stat = await fs.lstat(identity.target);
+    } catch (error) {
+      throw new FileTransactionPreconditionError(
+        entry.target,
+        `事务目标父路径在提交前消失: ${identity.target}（${getErrorMessage(error)}）`
+      );
+    }
+    if (
+      stat.isSymbolicLink() ||
+      !stat.isDirectory() ||
+      stat.dev !== identity.dev ||
+      stat.ino !== identity.ino
+    ) {
+      throw new FileTransactionPreconditionError(
+        entry.target,
+        `事务目标父路径在提交期间被替换: ${identity.target}`
+      );
     }
   }
 }
@@ -221,17 +1435,48 @@ async function assertTargetUnchanged(entry: TransactionEntry): Promise<void> {
       `事务目标在提交前改变类型: ${entry.target}`
     );
   }
+  if (!entry.originalIdentity || !sameFileIdentity(stat, entry.originalIdentity)) {
+    throw new FileTransactionPreconditionError(
+      entry.target,
+      `事务目标在提交前被替换: ${entry.target}`
+    );
+  }
   const current = await fs.readFile(entry.target);
   if (!current.equals(entry.original)) {
     throw new FileTransactionPreconditionError(
       entry.target,
-      `事务目标在提交前发生变化: ${entry.target}`
+      `事务目标在替换前发生变化: ${entry.target}`
     );
   }
 }
 
+async function moveTargetToBackup(entry: TransactionEntry): Promise<void> {
+  if (!entry.originalIdentity) {
+    throw new Error(`事务目标缺少原始文件身份: ${entry.target}`);
+  }
+  await fs.move(entry.target, entry.backup);
+  entry.backupMoved = true;
+  const backupStat = await fs.lstat(entry.backup);
+  if (!sameFileIdentity(backupStat, entry.originalIdentity)) {
+    try {
+      await restoreUnexpectedMovedFile(entry.backup, entry.target, backupStat);
+      entry.backupMoved = false;
+    } catch (restoreError) {
+      throw new Error(
+        `事务目标父路径在移动窗口被替换，误移动文件保留在 ${entry.backup}；` +
+        `自动归还失败：${getErrorMessage(restoreError)}`
+      );
+    }
+    throw new FileTransactionPreconditionError(
+      entry.target,
+      `事务目标父路径在移动窗口被替换: ${entry.target}`
+    );
+  }
+  await assertBackupUnchanged(entry);
+}
+
 async function assertBackupUnchanged(entry: TransactionEntry): Promise<void> {
-  if (!entry.original) {
+  if (!entry.original || !entry.originalIdentity) {
     throw new Error(`事务备份缺少原始快照: ${entry.target}`);
   }
   const stat = await fs.lstat(entry.backup);
@@ -241,6 +1486,12 @@ async function assertBackupUnchanged(entry: TransactionEntry): Promise<void> {
       `事务目标在替换前改变类型: ${entry.target}`
     );
   }
+  if (!sameFileIdentity(stat, entry.originalIdentity)) {
+    throw new FileTransactionPreconditionError(
+      entry.target,
+      `事务目标在替换前被替换: ${entry.target}`
+    );
+  }
   const backup = await fs.readFile(entry.backup);
   if (!backup.equals(entry.original)) {
     throw new FileTransactionPreconditionError(
@@ -248,6 +1499,62 @@ async function assertBackupUnchanged(entry: TransactionEntry): Promise<void> {
       `事务目标在替换前发生变化: ${entry.target}`
     );
   }
+}
+
+async function assertInstalledIdentity(entry: TransactionEntry): Promise<void> {
+  if (!entry.stagedIdentity) {
+    throw new Error(`事务写入缺少暂存文件身份: ${entry.target}`);
+  }
+  const stat = await fs.lstat(entry.target);
+  if (
+    stat.isSymbolicLink() ||
+    !stat.isFile() ||
+    !sameFileIdentity(stat, entry.stagedIdentity)
+  ) {
+    throw new FileTransactionPreconditionError(
+      entry.target,
+      `事务目标在原子安装期间被替换: ${entry.target}`
+    );
+  }
+}
+
+async function restoreUnexpectedMovedFile(
+  movedFile: string,
+  logicalTarget: string,
+  movedIdentity: FileIdentity
+): Promise<void> {
+  const realParent = await fs.realpath(path.dirname(logicalTarget));
+  const realParentStat = await fs.lstat(realParent);
+  if (realParentStat.isSymbolicLink() || !realParentStat.isDirectory()) {
+    throw new Error(`误移动文件的实际父路径不是可信目录: ${realParent}`);
+  }
+  const realParentIdentity: DirectoryIdentity = {
+    target: realParent,
+    dev: realParentStat.dev,
+    ino: realParentStat.ino,
+  };
+  const actualTarget = path.join(realParent, path.basename(logicalTarget));
+  if (await pathExistsWithLstat(actualTarget)) {
+    throw new Error(`误移动文件的原位置已被占用: ${actualTarget}`);
+  }
+  await installVerifiedHardLinkAndRetireSource(
+    movedFile,
+    actualTarget,
+    async () => assertDirectoryIdentityUnchanged(realParentIdentity, '误移动文件实际父路径'),
+    '误移动文件归还',
+    movedIdentity
+  );
+}
+
+function fileIdentity(stat: Pick<fs.Stats, 'dev' | 'ino'>): FileIdentity {
+  return { dev: stat.dev, ino: stat.ino };
+}
+
+function sameFileIdentity(
+  stat: Pick<fs.Stats, 'dev' | 'ino'>,
+  identity: FileIdentity
+): boolean {
+  return stat.dev === identity.dev && stat.ino === identity.ino;
 }
 
 async function pathExistsWithLstat(target: string): Promise<boolean> {
@@ -270,9 +1577,34 @@ async function restoreEntries(entries: TransactionEntry[]): Promise<void> {
       if (await pathExistsWithLstat(entry.target)) {
         const rollbackCopy = rollbackCopyPath(entry);
         await fs.ensureDir(path.dirname(rollbackCopy));
+        const targetStat = await fs.lstat(entry.target);
+        if (
+          !entry.stagedIdentity ||
+          targetStat.isSymbolicLink() ||
+          !targetStat.isFile() ||
+          !sameFileIdentity(targetStat, entry.stagedIdentity)
+        ) {
+          throw new Error(`回滚目标已被并发替换，原文件保留在: ${entry.target}`);
+        }
         await fs.move(entry.target, rollbackCopy);
+        const rollbackStat = await fs.lstat(rollbackCopy);
+        if (!sameFileIdentity(rollbackStat, entry.stagedIdentity)) {
+          await restoreUnexpectedMovedFile(rollbackCopy, entry.target, rollbackStat);
+          throw new Error(`回滚期间事务目标父路径被替换: ${entry.target}`);
+        }
         if (await fileMatchesWrite(rollbackCopy, entry)) {
-          await fs.remove(rollbackCopy);
+          if (!entry.stagedIdentity || entry.mutation.delete) {
+            throw new Error(`回滚事务输出缺少可信身份: ${entry.target}`);
+          }
+          const written = Buffer.isBuffer(entry.mutation.content)
+            ? entry.mutation.content
+            : Buffer.from(entry.mutation.content);
+          await unlinkVerifiedFile(
+            rollbackCopy,
+            entry.stagedIdentity,
+            sha256(written),
+            '回滚事务输出清理'
+          );
         } else {
           const conflict = rollbackConflictPath(entry);
           await fs.ensureDir(path.dirname(conflict));
@@ -283,6 +1615,7 @@ async function restoreEntries(entries: TransactionEntry[]): Promise<void> {
       entry.stagedInstalled = false;
     }
     if (targetWasVacated) {
+      await assertParentIdentitiesUnchanged(entry);
       const lateConflict = await preserveLateTarget(entry);
       if (lateConflict) {
         conflicts.push(lateConflict);
@@ -291,7 +1624,14 @@ async function restoreEntries(entries: TransactionEntry[]): Promise<void> {
     if (entry.backupMoved) {
       await fs.ensureDir(path.dirname(entry.target));
       try {
-        await linkFileNoClobber(entry.backup, entry.target);
+        await installVerifiedHardLinkAndRetireSource(
+          entry.backup,
+          entry.target,
+          async () => assertParentIdentitiesUnchanged(entry),
+          '事务回滚备份恢复',
+          entry.originalIdentity ?? undefined,
+          entry.original ? sha256(entry.original) : undefined
+        );
       } catch (error) {
         if (!(error instanceof FileTransactionPreconditionError)) {
           throw error;
@@ -300,14 +1640,22 @@ async function restoreEntries(entries: TransactionEntry[]): Promise<void> {
         if (restoreConflict) {
           conflicts.push(restoreConflict);
         }
-        await linkFileNoClobber(entry.backup, entry.target);
+        await installVerifiedHardLinkAndRetireSource(
+          entry.backup,
+          entry.target,
+          async () => assertParentIdentitiesUnchanged(entry),
+          '事务回滚备份恢复',
+          entry.originalIdentity ?? undefined,
+          entry.original ? sha256(entry.original) : undefined
+        );
       }
-      await fs.remove(entry.backup);
       entry.backupMoved = false;
     }
   }
   if (conflicts.length > 0) {
-    throw new Error(`回滚检测到并发修改，冲突副本保留在: ${conflicts.join(', ')}`);
+    throw new FileTransactionRollbackConflictError(
+      `回滚检测到并发修改，冲突副本保留在: ${conflicts.join(', ')}`
+    );
   }
 }
 
@@ -327,9 +1675,12 @@ async function fileMatchesWrite(
     return false;
   }
   const current = await fs.readFile(target);
-  const written = Buffer.isBuffer(entry.content)
-    ? entry.content
-    : Buffer.from(entry.content);
+  if (entry.mutation.delete) {
+    return false;
+  }
+  const written = Buffer.isBuffer(entry.mutation.content)
+    ? entry.mutation.content
+    : Buffer.from(entry.mutation.content);
   return current.equals(written);
 }
 
@@ -347,6 +1698,140 @@ async function preserveLateTarget(
   await fs.ensureDir(path.dirname(conflict));
   await fs.move(entry.target, conflict);
   return conflict;
+}
+
+async function installVerifiedHardLinkAndRetireSource(
+  source: string,
+  target: string,
+  verifyParent: () => Promise<void>,
+  label: string,
+  expectedSourceIdentity?: FileIdentity,
+  expectedSourceSha256?: string
+): Promise<void> {
+  try {
+    await verifyParent();
+  } catch (error) {
+    throw new Error(`${label}前父路径验证失败：${getErrorMessage(error)}；源快照已保留在 ${source}`);
+  }
+  const sourceStat = await fs.lstat(source);
+  if (sourceStat.isSymbolicLink() || !sourceStat.isFile()) {
+    throw new Error(`${label}源快照不是普通文件: ${source}`);
+  }
+  const sourceIdentity = fileIdentity(sourceStat);
+  if (expectedSourceIdentity && !sameFileIdentity(sourceStat, expectedSourceIdentity)) {
+    throw new Error(`${label}源快照已被替换: ${source}`);
+  }
+  const sourceSha256 = await verifiedFileSha256(source, sourceIdentity, label);
+  const trustedSourceSha256 = expectedSourceSha256 ?? sourceSha256;
+  if (sourceSha256 !== trustedSourceSha256) {
+    throw new Error(`${label}源快照哈希不匹配: ${source}`);
+  }
+
+  await linkFileNoClobber(source, target);
+  try {
+    await assertHardLinkIdentity(target, sourceIdentity, label);
+    await verifyParent();
+    await assertHardLinkIdentity(target, sourceIdentity, label);
+    const currentSourceSha256 = await verifiedFileSha256(source, sourceIdentity, label);
+    if (currentSourceSha256 !== trustedSourceSha256) {
+      throw new Error(`${label}源快照在验证期间被修改: ${source}`);
+    }
+  } catch (error) {
+    let cleanupError: unknown;
+    try {
+      await unlinkInstalledHardLinkIfOwned(target, sourceIdentity);
+    } catch (installedLinkCleanupError) {
+      cleanupError = installedLinkCleanupError;
+    }
+    throw new Error(
+      `${label}未通过安装后验证：${getErrorMessage(error)}；源快照已保留在 ${source}` +
+      (cleanupError ? `；无法安全移除未确认链接：${getErrorMessage(cleanupError)}` : '')
+    );
+  }
+  await fs.unlink(source);
+}
+
+async function verifiedFileSha256(
+  target: string,
+  expectedIdentity: FileIdentity,
+  label: string
+): Promise<string> {
+  const before = await fs.lstat(target);
+  if (
+    before.isSymbolicLink() ||
+    !before.isFile() ||
+    !sameFileIdentity(before, expectedIdentity)
+  ) {
+    throw new Error(`${label}文件身份不可信: ${target}`);
+  }
+  const content = await fs.readFile(target);
+  const after = await fs.lstat(target);
+  if (
+    after.isSymbolicLink() ||
+    !after.isFile() ||
+    !sameFileIdentity(after, expectedIdentity)
+  ) {
+    throw new Error(`${label}文件在读取期间被替换: ${target}`);
+  }
+  return sha256(content);
+}
+
+async function unlinkVerifiedFile(
+  target: string,
+  expectedIdentity: FileIdentity | undefined,
+  expectedSha256: string,
+  label: string
+): Promise<void> {
+  const stat = await fs.lstat(target);
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(`${label}目标不是普通文件: ${target}`);
+  }
+  const identity = fileIdentity(stat);
+  if (expectedIdentity && !sameFileIdentity(stat, expectedIdentity)) {
+    throw new Error(`${label}目标已被替换: ${target}`);
+  }
+  if (await verifiedFileSha256(target, identity, label) !== expectedSha256) {
+    throw new Error(`${label}目标哈希不匹配: ${target}`);
+  }
+  await fs.unlink(target);
+}
+
+async function assertHardLinkIdentity(
+  target: string,
+  sourceIdentity: FileIdentity,
+  label: string
+): Promise<void> {
+  const targetStat = await fs.lstat(target);
+  if (
+    targetStat.isSymbolicLink() ||
+    !targetStat.isFile() ||
+    !sameFileIdentity(targetStat, sourceIdentity)
+  ) {
+    throw new Error(`${label}目标未链接到可信源快照: ${target}`);
+  }
+}
+
+async function unlinkInstalledHardLinkIfOwned(
+  target: string,
+  sourceIdentity: FileIdentity
+): Promise<void> {
+  let stat: fs.Stats;
+  try {
+    stat = await fs.lstat(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return;
+    }
+    throw error;
+  }
+  if (
+    stat.isSymbolicLink() ||
+    !stat.isFile() ||
+    !sameFileIdentity(stat, sourceIdentity)
+  ) {
+    throw new Error(`未确认链接已被替换，拒绝移除: ${target}`);
+  }
+  await fs.unlink(target);
 }
 
 async function linkFileNoClobber(source: string, target: string): Promise<void> {
@@ -376,11 +1861,11 @@ function rollbackConflictPath(entry: TransactionEntry): string {
 async function findInitiallyMissingDirectories(
   root: string,
   transactionRoot: string,
-  writes: FileWrite[]
+  mutations: FileMutation[]
 ): Promise<string[]> {
   const starts = [
     path.dirname(transactionRoot),
-    ...writes.map((write) => path.dirname(write.target)),
+    ...mutations.map((mutation) => path.dirname(mutation.target)),
   ];
   const candidates = new Set<string>();
   for (const start of starts) {

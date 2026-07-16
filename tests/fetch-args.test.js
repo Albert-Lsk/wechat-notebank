@@ -7,6 +7,8 @@ const {
   parseInitArgs,
   parsePackCreateArgs,
   parsePackApproveArgs,
+  parsePackRejectArgs,
+  parsePackRevokeArgs,
 } = require('../dist/lib/cli');
 
 assert.deepStrictEqual(packageJson.bin, {
@@ -159,6 +161,39 @@ assert.throws(
 assert.throws(
   () => parsePackApproveArgs(['approve', '/tmp/pack.md']),
   /--items/
+);
+
+assert.deepStrictEqual(
+  parsePackRejectArgs(['reject', '/tmp/vault/Inbox/pack.md', '--json']),
+  {
+    packFile: '/tmp/vault/Inbox/pack.md',
+    json: true,
+  }
+);
+
+assert.deepStrictEqual(
+  parsePackRevokeArgs([
+    'revoke',
+    '/tmp/vault/Inbox/pack.md',
+    '--items',
+    'L2-01, L4-Q01',
+    '--json',
+  ]),
+  {
+    packFile: '/tmp/vault/Inbox/pack.md',
+    items: ['L2-01', 'L4-Q01'],
+    json: true,
+  }
+);
+
+assert.throws(
+  () => parsePackRevokeArgs(['revoke', '/tmp/pack.md']),
+  /--items/
+);
+
+assert.throws(
+  () => parsePackRevokeArgs(['revoke', '/tmp/pack.md', '--items', 'L2-01,L2-01']),
+  /duplicate candidate IDs/
 );
 
 assert.deepStrictEqual(parseInitArgs([]), {

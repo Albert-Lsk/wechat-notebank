@@ -44,6 +44,7 @@ const command_error_1 = require("../lib/command-error");
 const environment_1 = require("../lib/environment");
 const package_info_1 = require("../lib/package-info");
 const agent_integration_1 = require("../lib/agent-integration");
+const pack_integrity_1 = require("../lib/pack-integrity");
 async function doctorCommand() {
     const version = await (0, package_info_1.getPackageVersion)();
     const checks = [];
@@ -226,6 +227,16 @@ async function checkConfigAndArchive() {
             }
             await fs.access(archivePath, fs_1.constants.W_OK);
             checks.push({ id: 'archive', status: 'passed', message: archivePath });
+            try {
+                checks.push(...await (0, pack_integrity_1.inspectPackIntegrity)((0, pack_integrity_1.inferVaultRoot)(archivePath)));
+            }
+            catch (error) {
+                checks.push({
+                    id: 'integrity',
+                    status: 'warning',
+                    message: `无法完成加工包完整性扫描: ${(0, command_error_1.getErrorMessage)(error)}`,
+                });
+            }
         }
         catch {
             checks.push({

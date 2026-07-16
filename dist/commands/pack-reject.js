@@ -36,53 +36,49 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updatePackCommand = updatePackCommand;
+exports.rejectPackCommand = rejectPackCommand;
 const fs = __importStar(require("fs-extra"));
 const gray_matter_1 = __importDefault(require("gray-matter"));
 const path = __importStar(require("path"));
 const command_error_1 = require("../lib/command-error");
 const file_transaction_1 = require("../lib/file-transaction");
-const pack_manifest_1 = require("../lib/pack-manifest");
 const pack_state_1 = require("../lib/pack-state");
 const pack_render_1 = require("../lib/pack-render");
 const storage_1 = require("../lib/storage");
 const pack_recovery_1 = require("../lib/pack-recovery");
-async function updatePackCommand(args, transactionHooks = {}) {
+async function rejectPackCommand(args, transactionHooks = {}) {
     const packFile = path.resolve(args.packFile);
     await (0, pack_recovery_1.recoverPackTransactionsForFile)(packFile);
     const initial = await locatePack(packFile);
     return (0, storage_1.withSourceUrlLock)(initial.vaultRoot, initial.state.manifest.sourceUrl, async () => {
         await (0, pack_recovery_1.recoverPackTransactions)(initial.vaultRoot);
         const current = await locatePack(packFile);
-        if (current.state.packId !== initial.state.packId) {
+        if (current.state.packId !== initial.state.packId ||
+            current.state.revision !== initial.state.revision) {
             throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', '加工包状态在获取锁期间发生变化');
         }
-        return updatePackLocked(current, path.resolve(args.manifestFile), transactionHooks);
+        if (current.state.status === 'rejected') {
+            return rejectResult('reuse', current.state, current.stateFile);
+        }
+        return rejectPackLocked(current, transactionHooks);
     });
 }
-async function updatePackLocked(located, manifestFile, transactionHooks) {
+async function rejectPackLocked(located, transactionHooks) {
     const { state, stateFile, vaultRoot } = located;
-    const manifest = await loadUpdatedManifest(manifestFile, state);
-    assertReviewAnswersPreserved(state.manifest, manifest);
     const packContent = await loadVisiblePack(state);
-    if ((0, pack_manifest_1.canonicalJson)(state.manifest) === (0, pack_manifest_1.canonicalJson)(manifest)) {
-        return updateResult('reuse', state, stateFile);
-    }
-    if (state.outputs.some((output) => output.kind === 'L4')) {
-        throw new command_error_1.CommandError('MANIFEST_INVALID', '已发布 L4 的回答或整理稿不可直接更新，请创建新 revision');
-    }
     const now = new Date().toISOString();
     const nextState = {
         ...state,
+        status: 'rejected',
         updatedAt: now,
-        manifest,
+        rejectedAt: now,
     };
     const previousStateContent = (0, pack_state_1.serializePackState)(state);
     const revisionStateFile = path.join(path.dirname(stateFile), 'revisions', `${state.revision}.json`);
     const writes = [
         {
             target: state.packFile,
-            content: (0, pack_render_1.updatePackReview)(packContent, manifest, now),
+            content: (0, pack_render_1.rejectPack)(packContent, now),
             expectedContent: packContent,
         },
         {
@@ -105,29 +101,7 @@ async function updatePackLocked(located, manifestFile, transactionHooks) {
         }
         throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
     }
-    return updateResult('update', nextState, stateFile);
-}
-async function loadUpdatedManifest(manifestFile, state) {
-    let value;
-    try {
-        value = await fs.readJson(manifestFile);
-    }
-    catch (error) {
-        throw new command_error_1.CommandError('MANIFEST_INVALID', (0, command_error_1.getErrorMessage)(error));
-    }
-    const manifest = (0, pack_manifest_1.validatePackManifest)(value, state.manifest.sourceFile);
-    if ((0, pack_manifest_1.canonicalJson)((0, pack_manifest_1.initialManifestOf)(manifest)) !==
-        (0, pack_manifest_1.canonicalJson)((0, pack_manifest_1.initialManifestOf)(state.manifest))) {
-        throw new command_error_1.CommandError('MANIFEST_INVALID', '更新加工包时只能追加用户回答或调整 Agent 整理稿');
-    }
-    return manifest;
-}
-function assertReviewAnswersPreserved(current, next) {
-    for (const [questionId, answer] of Object.entries(current.reviewAnswers || {})) {
-        if (next.reviewAnswers?.[questionId] !== answer) {
-            throw new command_error_1.CommandError('MANIFEST_INVALID', `用户原始回答不可删除或改写: ${questionId}`);
-        }
-    }
+    return rejectResult('reject', nextState, stateFile);
 }
 async function loadVisiblePack(state) {
     let content;
@@ -153,26 +127,20 @@ async function loadVisiblePack(state) {
 }
 async function locatePack(packFile) {
     try {
-        return await (0, pack_state_1.locatePackState)(packFile);
+        return await (0, pack_state_1.locatePackState)(packFile, ['pending', 'partial', 'rejected']);
     }
     catch (error) {
         throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', (0, command_error_1.getErrorMessage)(error));
     }
 }
-function updateResult(action, state, stateFile) {
+function rejectResult(action, state, stateFile) {
     return {
         action,
         packId: state.packId,
         revision: state.revision,
-        status: state.status === 'approved'
-            ? 'approved'
-            : state.status === 'partial'
-                ? 'partial'
-                : 'pending',
-        answeredQuestionIds: state.manifest.reviewQuestions
-            .map((question) => question.id)
-            .filter((questionId) => state.manifest.reviewAnswers?.[questionId] !== undefined),
-        hasReviewDraft: state.manifest.reviewDraft !== undefined,
+        status: 'rejected',
+        approvedItems: state.approvedItems,
+        publishedFiles: state.outputs.map((output) => output.file),
         packFile: state.packFile,
         stateFile,
     };

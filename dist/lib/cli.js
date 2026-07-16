@@ -7,6 +7,8 @@ exports.parseDoctorArgs = parseDoctorArgs;
 exports.parsePackCreateArgs = parsePackCreateArgs;
 exports.parsePackApproveArgs = parsePackApproveArgs;
 exports.parsePackUpdateArgs = parsePackUpdateArgs;
+exports.parsePackRejectArgs = parsePackRejectArgs;
+exports.parsePackRevokeArgs = parsePackRevokeArgs;
 exports.parseInitArgs = parseInitArgs;
 exports.isJsonOutputRequested = isJsonOutputRequested;
 exports.parseImportArgs = parseImportArgs;
@@ -205,6 +207,63 @@ function parsePackUpdateArgs(args) {
         throw new Error('请提供 --manifest <file>');
     }
     return { packFile, manifestFile, json };
+}
+function parsePackRejectArgs(args) {
+    const [operation, packFile, ...options] = args;
+    if (operation !== 'reject') {
+        throw new Error('pack requires reject');
+    }
+    if (!packFile || packFile.startsWith('--')) {
+        throw new Error('请提供待审核加工包路径');
+    }
+    let json = false;
+    for (const option of options) {
+        if (isJsonOutputOption(option)) {
+            json = true;
+            continue;
+        }
+        throw new Error(`Unknown pack reject option: ${option}`);
+    }
+    return { packFile, json };
+}
+function parsePackRevokeArgs(args) {
+    const [operation, packFile, ...options] = args;
+    if (operation !== 'revoke') {
+        throw new Error('pack requires revoke');
+    }
+    if (!packFile || packFile.startsWith('--')) {
+        throw new Error('请提供待审核加工包路径');
+    }
+    let items;
+    let json = false;
+    for (let index = 0; index < options.length; index++) {
+        const option = options[index];
+        if (isJsonOutputOption(option)) {
+            json = true;
+            continue;
+        }
+        if (option === '--items') {
+            const value = options[index + 1];
+            if (!value || value.startsWith('--')) {
+                throw new Error('--items requires comma-separated candidate IDs');
+            }
+            const parsed = value.split(',').map((item) => item.trim()).filter(Boolean);
+            if (parsed.length === 0) {
+                throw new Error('--items requires comma-separated candidate IDs');
+            }
+            if (new Set(parsed).size !== parsed.length) {
+                throw new Error('--items contains duplicate candidate IDs');
+            }
+            items = parsed;
+            index++;
+            continue;
+        }
+        throw new Error(`Unknown pack revoke option: ${option}`);
+    }
+    if (!items) {
+        throw new Error('请提供 --items <ids>');
+    }
+    return { packFile, items, json };
 }
 function parseInitArgs(args) {
     if (args.length === 0) {

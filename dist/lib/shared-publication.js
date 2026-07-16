@@ -37,6 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.planSharedPublication = planSharedPublication;
+exports.planSharedRetraction = planSharedRetraction;
 const fs = __importStar(require("fs-extra"));
 const gray_matter_1 = __importDefault(require("gray-matter"));
 const path = __importStar(require("path"));
@@ -44,6 +45,19 @@ const command_error_1 = require("./command-error");
 const pack_publication_1 = require("./pack-publication");
 const pack_state_1 = require("./pack-state");
 async function planSharedPublication(input) {
+    const plan = await planSharedPublicationChange(input);
+    if (!plan.output || plan.mutations.some((mutation) => mutation.delete)) {
+        throw new Error(`内部错误：${input.adapter.label} 发布计划无有效输出`);
+    }
+    return {
+        output: plan.output,
+        writes: plan.mutations,
+    };
+}
+async function planSharedRetraction(input) {
+    return planSharedPublicationChange(input);
+}
+async function planSharedPublicationChange(input) {
     const { adapter, state, vaultRoot } = input;
     const existing = await loadSharedPublication({
         stateFile: input.stateFile,
@@ -71,31 +85,48 @@ async function planSharedPublication(input) {
     const publications = publishedStates
         .filter((stored) => (0, pack_state_1.packStateKey)(stored.state) !== currentKey)
         .map((stored) => adapter.fromStoredState(stored.state, vaultRoot))
-        .concat(input.currentPublication)
+        .concat(input.currentPublication ? [input.currentPublication] : [])
         .sort((left, right) => publicationOrder(left.state, right.state));
     adapter.validatePublications(publications);
+    if (publications.length === 0) {
+        if (!existing) {
+            throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', `${adapter.label} 文件与隐藏状态缺失`);
+        }
+        return {
+            output: null,
+            sharedFileRemoved: true,
+            mutations: [
+                { target: input.file, delete: true, expectedContent: existing.fileContent },
+                { target: input.stateFile, delete: true, expectedContent: existing.stateContent },
+            ],
+        };
+    }
     const content = adapter.render(publications, input.sourceTitle, input.sourceWikiPath, publications.map((publication) => publication.publishedAt).sort()[0], input.now);
-    const output = {
-        kind: adapter.kind,
-        itemIds: adapter.itemIdsOf(input.currentPublication),
-        file: input.file,
-        sha256: (0, pack_publication_1.sha256Content)(content),
-        publishedAt: input.currentPublication.publishedAt,
-        updatedAt: input.now,
-    };
+    const contentSha256 = (0, pack_publication_1.sha256Content)(content);
+    const output = input.currentPublication
+        ? {
+            kind: adapter.kind,
+            itemIds: adapter.itemIdsOf(input.currentPublication),
+            file: input.file,
+            sha256: contentSha256,
+            publishedAt: input.currentPublication.publishedAt,
+            updatedAt: input.now,
+        }
+        : null;
     const nextState = {
         schemaVersion: 1,
         sourceFile: state.manifest.sourceFile,
         sourceUrl: state.manifest.sourceUrl,
         file: input.file,
-        sha256: output.sha256,
+        sha256: contentSha256,
         publications: publications.map((publication) => publicationIndexEntry(publication.state, adapter.kind, adapter.itemIdsOf(publication), publication.publishedAt)),
         createdAt: existing?.state.createdAt || input.now,
         updatedAt: input.now,
     };
     return {
         output,
-        writes: [
+        sharedFileRemoved: false,
+        mutations: [
             {
                 target: input.file,
                 content,

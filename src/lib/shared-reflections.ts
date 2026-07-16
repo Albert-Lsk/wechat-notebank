@@ -10,11 +10,15 @@ import {
 } from './pack-publication';
 import {
   planSharedPublication,
+  planSharedRetraction,
+  SharedPublicationAdapter,
   SharedPublicationPlan,
+  SharedRetractionPlan,
 } from './shared-publication';
 import { PackState } from './pack-state';
 
 export type SharedReflectionPlan = SharedPublicationPlan;
+export type SharedReflectionRetractionPlan = SharedRetractionPlan;
 
 export async function planSharedReflectionPublication(input: {
   vaultRoot: string;
@@ -44,21 +48,53 @@ export async function planSharedReflectionPublication(input: {
     sourceWikiPath: input.sourceWikiPath,
     now: input.now,
     currentPublication,
-    adapter: {
-      kind: 'L4',
-      label: '共享 L4',
-      itemIdPattern: /^L4-Q\d{2}$/,
-      fromStoredState: reflectionPublication,
-      itemIdsOf: (publication) =>
-        publication.state.manifest.reviewQuestions.map((question) => question.id),
-      validatePublications: (publications) => {
-        for (const publication of publications) {
-          assertCompleteReview(publication.state);
-        }
-      },
-      render: renderReflections,
-    },
+    adapter: reflectionAdapter(),
   });
+}
+
+export async function planSharedReflectionRetraction(input: {
+  vaultRoot: string;
+  state: PackState;
+  sourceTitle: string;
+  sourceWikiPath: string;
+  now: string;
+}): Promise<SharedReflectionRetractionPlan> {
+  const { state, vaultRoot } = input;
+  if (!state.outputs.some((output) => output.kind === 'L4')) {
+    throw new Error('内部错误：加工包缺少 L4 输出');
+  }
+  return planSharedRetraction({
+    vaultRoot,
+    state,
+    file: reflectionFilePath(
+      vaultRoot,
+      state.manifest.sourceFile,
+      state.manifest.sourceUrl
+    ),
+    stateFile: reflectionStateFilePath(vaultRoot, state.manifest.sourceUrl),
+    sourceTitle: input.sourceTitle,
+    sourceWikiPath: input.sourceWikiPath,
+    now: input.now,
+    currentPublication: null,
+    adapter: reflectionAdapter(),
+  });
+}
+
+function reflectionAdapter(): SharedPublicationAdapter<ReflectionPublication> {
+  return {
+    kind: 'L4',
+    label: '共享 L4',
+    itemIdPattern: /^L4-Q\d{2}$/,
+    fromStoredState: reflectionPublication,
+    itemIdsOf: (publication) =>
+      publication.state.manifest.reviewQuestions.map((question) => question.id),
+    validatePublications: (publications) => {
+      for (const publication of publications) {
+        assertCompleteReview(publication.state);
+      }
+    },
+    render: renderReflections,
+  };
 }
 
 function assertCompleteReview(state: PackState): void {

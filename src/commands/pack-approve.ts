@@ -31,6 +31,10 @@ import {
 import { planSharedMaterialsPublication } from '../lib/shared-materials';
 import { planSharedReflectionPublication } from '../lib/shared-reflections';
 import { withSourceUrlLock } from '../lib/storage';
+import {
+  recoverPackTransactions,
+  recoverPackTransactionsForFile,
+} from '../lib/pack-recovery';
 
 export interface PackApproveResult {
   action: 'publish' | 'reuse';
@@ -48,8 +52,10 @@ export async function approvePackCommand(
   transactionHooks: FileTransactionHooks = {}
 ): Promise<PackApproveResult> {
   const packFile = path.resolve(args.packFile);
+  await recoverPackTransactionsForFile(packFile);
   const initial = await locatePack(packFile);
   return withSourceUrlLock(initial.vaultRoot, initial.state.manifest.sourceUrl, async () => {
+    await recoverPackTransactions(initial.vaultRoot);
     const current = await locatePack(packFile);
     if (current.state.packId !== initial.state.packId) {
       throw new CommandError('PACK_ALREADY_EXISTS', '加工包状态在获取锁期间发生变化');

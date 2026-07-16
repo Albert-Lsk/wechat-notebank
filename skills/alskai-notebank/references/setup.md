@@ -24,6 +24,8 @@ alskai-notebank doctor --json
 
 Treat `failed` checks and their stable error codes as blockers. Treat missing Agent integrations or knowledge-base configuration as warnings when they are outside the user's requested scope. Report the CLI result; do not recreate platform, dependency, configuration, directory, or version checks manually.
 
+Treat `integrity:*` warnings as read-only reports of missing generated files, broken managed links, missing state, or hash drift. Show the affected paths and ask the user how to handle them. Do not delete, rewrite, or auto-repair the vault on behalf of `doctor`.
+
 If the requested Agent integration passes but the current session still cannot discover it, tell the user to restart that Agent. Do not inspect repository internals to invent another diagnosis.
 
 ## Boundaries

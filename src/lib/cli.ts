@@ -41,6 +41,17 @@ export interface PackUpdateArgs {
   json: boolean;
 }
 
+export interface PackRejectArgs {
+  packFile: string;
+  json: boolean;
+}
+
+export interface PackRevokeArgs {
+  packFile: string;
+  items: string[];
+  json: boolean;
+}
+
 export interface LegacyInitArgs {
   kind: 'legacy';
   json: false;
@@ -281,6 +292,67 @@ export function parsePackUpdateArgs(args: string[]): PackUpdateArgs {
     throw new Error('请提供 --manifest <file>');
   }
   return { packFile, manifestFile, json };
+}
+
+export function parsePackRejectArgs(args: string[]): PackRejectArgs {
+  const [operation, packFile, ...options] = args;
+  if (operation !== 'reject') {
+    throw new Error('pack requires reject');
+  }
+  if (!packFile || packFile.startsWith('--')) {
+    throw new Error('请提供待审核加工包路径');
+  }
+
+  let json = false;
+  for (const option of options) {
+    if (isJsonOutputOption(option)) {
+      json = true;
+      continue;
+    }
+    throw new Error(`Unknown pack reject option: ${option}`);
+  }
+  return { packFile, json };
+}
+
+export function parsePackRevokeArgs(args: string[]): PackRevokeArgs {
+  const [operation, packFile, ...options] = args;
+  if (operation !== 'revoke') {
+    throw new Error('pack requires revoke');
+  }
+  if (!packFile || packFile.startsWith('--')) {
+    throw new Error('请提供待审核加工包路径');
+  }
+
+  let items: string[] | undefined;
+  let json = false;
+  for (let index = 0; index < options.length; index++) {
+    const option = options[index];
+    if (isJsonOutputOption(option)) {
+      json = true;
+      continue;
+    }
+    if (option === '--items') {
+      const value = options[index + 1];
+      if (!value || value.startsWith('--')) {
+        throw new Error('--items requires comma-separated candidate IDs');
+      }
+      const parsed = value.split(',').map((item) => item.trim()).filter(Boolean);
+      if (parsed.length === 0) {
+        throw new Error('--items requires comma-separated candidate IDs');
+      }
+      if (new Set(parsed).size !== parsed.length) {
+        throw new Error('--items contains duplicate candidate IDs');
+      }
+      items = parsed;
+      index++;
+      continue;
+    }
+    throw new Error(`Unknown pack revoke option: ${option}`);
+  }
+  if (!items) {
+    throw new Error('请提供 --items <ids>');
+  }
+  return { packFile, items, json };
 }
 
 export function parseInitArgs(args: string[]): InitArgs {

@@ -2,7 +2,7 @@ import * as fs from 'fs-extra';
 import matter from 'gray-matter';
 import * as path from 'path';
 import { CommandError, getErrorMessage } from './command-error';
-import { FileWrite } from './file-transaction';
+import { FileMutation, FileWrite } from './file-transaction';
 import { sha256Content } from './pack-publication';
 import {
   listSourcePackStates,
@@ -40,6 +40,12 @@ export interface SharedPublicationAdapter<
 export interface SharedPublicationPlan {
   output: PublishedOutput;
   writes: FileWrite[];
+}
+
+export interface SharedRetractionPlan {
+  output: PublishedOutput | null;
+  mutations: FileMutation[];
+  sharedFileRemoved: boolean;
 }
 
 interface PublicationIndexEntry {
@@ -80,6 +86,45 @@ export async function planSharedPublication<
   currentPublication: Publication;
   adapter: SharedPublicationAdapter<Publication>;
 }): Promise<SharedPublicationPlan> {
+  const plan = await planSharedPublicationChange(input);
+  if (!plan.output || plan.mutations.some((mutation) => mutation.delete)) {
+    throw new Error(`内部错误：${input.adapter.label} 发布计划无有效输出`);
+  }
+  return {
+    output: plan.output,
+    writes: plan.mutations as FileWrite[],
+  };
+}
+
+export async function planSharedRetraction<
+  Publication extends SharedPublicationContribution
+>(input: {
+  vaultRoot: string;
+  state: PackState;
+  file: string;
+  stateFile: string;
+  sourceTitle: string;
+  sourceWikiPath: string;
+  now: string;
+  currentPublication: Publication | null;
+  adapter: SharedPublicationAdapter<Publication>;
+}): Promise<SharedRetractionPlan> {
+  return planSharedPublicationChange(input);
+}
+
+async function planSharedPublicationChange<
+  Publication extends SharedPublicationContribution
+>(input: {
+  vaultRoot: string;
+  state: PackState;
+  file: string;
+  stateFile: string;
+  sourceTitle: string;
+  sourceWikiPath: string;
+  now: string;
+  currentPublication: Publication | null;
+  adapter: SharedPublicationAdapter<Publication>;
+}): Promise<SharedRetractionPlan> {
   const { adapter, state, vaultRoot } = input;
   const existing = await loadSharedPublication({
     stateFile: input.stateFile,
@@ -119,9 +164,25 @@ export async function planSharedPublication<
   const publications = publishedStates
     .filter((stored) => packStateKey(stored.state) !== currentKey)
     .map((stored) => adapter.fromStoredState(stored.state, vaultRoot))
-    .concat(input.currentPublication)
+    .concat(input.currentPublication ? [input.currentPublication] : [])
     .sort((left, right) => publicationOrder(left.state, right.state));
   adapter.validatePublications(publications);
+  if (publications.length === 0) {
+    if (!existing) {
+      throw new CommandError(
+        'PACK_ALREADY_EXISTS',
+        `${adapter.label} 文件与隐藏状态缺失`
+      );
+    }
+    return {
+      output: null,
+      sharedFileRemoved: true,
+      mutations: [
+        { target: input.file, delete: true, expectedContent: existing.fileContent },
+        { target: input.stateFile, delete: true, expectedContent: existing.stateContent },
+      ],
+    };
+  }
   const content = adapter.render(
     publications,
     input.sourceTitle,
@@ -129,20 +190,23 @@ export async function planSharedPublication<
     publications.map((publication) => publication.publishedAt).sort()[0],
     input.now
   );
-  const output: PublishedOutput = {
-    kind: adapter.kind,
-    itemIds: adapter.itemIdsOf(input.currentPublication),
-    file: input.file,
-    sha256: sha256Content(content),
-    publishedAt: input.currentPublication.publishedAt,
-    updatedAt: input.now,
-  };
+  const contentSha256 = sha256Content(content);
+  const output: PublishedOutput | null = input.currentPublication
+    ? {
+      kind: adapter.kind,
+      itemIds: adapter.itemIdsOf(input.currentPublication),
+      file: input.file,
+      sha256: contentSha256,
+      publishedAt: input.currentPublication.publishedAt,
+      updatedAt: input.now,
+    }
+    : null;
   const nextState: SharedPublicationState = {
     schemaVersion: 1,
     sourceFile: state.manifest.sourceFile,
     sourceUrl: state.manifest.sourceUrl,
     file: input.file,
-    sha256: output.sha256,
+    sha256: contentSha256,
     publications: publications.map((publication) => publicationIndexEntry(
       publication.state,
       adapter.kind,
@@ -154,7 +218,8 @@ export async function planSharedPublication<
   };
   return {
     output,
-    writes: [
+    sharedFileRemoved: false,
+    mutations: [
       {
         target: input.file,
         content,

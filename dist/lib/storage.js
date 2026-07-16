@@ -46,18 +46,14 @@ exports.withSourceUrlLock = withSourceUrlLock;
 exports.getL1Path = getL1Path;
 const fs = __importStar(require("fs-extra"));
 const crypto_1 = require("crypto");
-const child_process_1 = require("child_process");
-const util_1 = require("util");
 const path = __importStar(require("path"));
 const gray_matter_1 = __importDefault(require("gray-matter"));
+const process_identity_1 = require("./process-identity");
 const MAX_FILENAME_BYTES = 240;
 const SOURCE_LOCK_RETRY_MS = 25;
 const SOURCE_LOCK_TIMEOUT_MS = 60000;
 const INVALID_OWNER_STALE_MS = 45000;
 const SOURCE_LOCK_OWNER_FILE = 'owner.json';
-const PROCESS_IDENTITY_CACHE_MS = 1000;
-const execFileAsync = (0, util_1.promisify)(child_process_1.execFile);
-const processIdentityCache = new Map();
 exports.FOLDER_L1 = 'L1_原文'; // 公众号文章原文
 exports.FOLDER_L2 = 'L2_原子卡片'; // 文章的原子想法卡片
 exports.FOLDER_L3 = 'L3_引用素材'; // 可以直接引用的素材
@@ -134,7 +130,7 @@ async function withSourceUrlLock(archivePath, sourceUrl, action) {
     const lockName = (0, crypto_1.createHash)('sha256').update(sourceUrl).digest('hex');
     const lockPath = path.join(lockDirectory, `${lockName}.lock`);
     await ensureSafeLockDirectory(archivePath, lockDirectory);
-    const currentProcessIdentity = await getProcessIdentity(process.pid);
+    const currentProcessIdentity = await (0, process_identity_1.getProcessIdentity)(process.pid);
     if (currentProcessIdentity.status !== 'found') {
         throw new Error(`无法读取进程启动身份: ${process.pid}`);
     }
@@ -230,7 +226,7 @@ async function quarantineAbandonedLock(lockPath) {
     }
     const { owner, stat } = inspection;
     if (owner) {
-        const currentProcessIdentity = await getProcessIdentity(owner.pid);
+        const currentProcessIdentity = await (0, process_identity_1.getProcessIdentity)(owner.pid);
         if (currentProcessIdentity.status === 'unknown') {
             return false;
         }
@@ -320,49 +316,7 @@ function isSourceLockOwner(value) {
         typeof owner.processStartedAt === 'string' &&
         owner.processStartedAt.length > 0);
 }
-async function getProcessIdentity(pid) {
-    const cached = processIdentityCache.get(pid);
-    if (cached && cached.expiresAt > Date.now()) {
-        return cached.result;
-    }
-    let result;
-    try {
-        const { stdout } = await execFileAsync('/bin/ps', [
-            '-p',
-            String(pid),
-            '-o',
-            'lstart=',
-        ], {
-            env: {
-                ...process.env,
-                TZ: 'UTC',
-                LC_ALL: 'C',
-                LANG: 'C',
-            },
-        });
-        const identity = stdout.trim();
-        result = identity
-            ? { status: 'found', identity }
-            : { status: 'unknown' };
-    }
-    catch (error) {
-        result = hasNumericErrorCode(error, 1)
-            ? { status: 'missing' }
-            : { status: 'unknown' };
-    }
-    processIdentityCache.set(pid, {
-        result,
-        expiresAt: Date.now() + PROCESS_IDENTITY_CACHE_MS,
-    });
-    return result;
-}
 function hasErrorCode(error, code) {
-    return Boolean(error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        error.code === code);
-}
-function hasNumericErrorCode(error, code) {
     return Boolean(error &&
         typeof error === 'object' &&
         'code' in error &&

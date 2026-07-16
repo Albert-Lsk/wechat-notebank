@@ -4,9 +4,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setPackStatus = setPackStatus;
+exports.rejectPack = rejectPack;
 exports.upsertDerivedLink = upsertDerivedLink;
+exports.removeDerivedLink = removeDerivedLink;
+exports.hasExactDerivedLink = hasExactDerivedLink;
+exports.derivedRegionLinkLines = derivedRegionLinkLines;
+exports.derivedRegionMatches = derivedRegionMatches;
 exports.withoutDerivedRegion = withoutDerivedRegion;
 exports.updatePackPublication = updatePackPublication;
+exports.revokePackPublication = revokePackPublication;
+exports.hasExactPublishedLink = hasExactPublishedLink;
+exports.publishedRegionMatches = publishedRegionMatches;
 exports.updatePackReview = updatePackReview;
 exports.renderPack = renderPack;
 const gray_matter_1 = __importDefault(require("gray-matter"));
@@ -25,6 +33,15 @@ function setPackStatus(content, supersededAt) {
         supersededAt,
     });
 }
+function rejectPack(content, rejectedAt) {
+    const document = (0, gray_matter_1.default)(content);
+    return gray_matter_1.default.stringify(document.content, {
+        ...document.data,
+        status: 'rejected',
+        rejectedAt,
+        updatedAt: rejectedAt,
+    });
+}
 function upsertDerivedLink(sourceContent, link) {
     const region = findDerivedRegion(sourceContent);
     if (region) {
@@ -37,6 +54,55 @@ function upsertDerivedLink(sourceContent, link) {
     }
     const suffix = sourceContent.endsWith('\n') ? '\n' : '\n\n';
     return `${sourceContent}${suffix}${DERIVED_START}\n## 衍生内容\n${link}\n${DERIVED_END}\n`;
+}
+function removeDerivedLink(sourceContent, link) {
+    const region = findDerivedRegion(sourceContent);
+    if (!region) {
+        return sourceContent;
+    }
+    const managed = sourceContent.slice(region.start, region.end);
+    const lines = managed.split('\n');
+    const nextLines = lines.filter((line) => line !== link);
+    if (nextLines.length === lines.length) {
+        return sourceContent;
+    }
+    return `${sourceContent.slice(0, region.start)}${nextLines.join('\n')}` +
+        `${sourceContent.slice(region.end)}`;
+}
+function hasExactDerivedLink(sourceContent, link) {
+    const region = findDerivedRegion(sourceContent);
+    if (!region) {
+        return false;
+    }
+    return sourceContent
+        .slice(region.start, region.end)
+        .split('\n')
+        .filter((line) => line === link)
+        .length === 1;
+}
+function derivedRegionLinkLines(sourceContent) {
+    const region = findDerivedRegion(sourceContent);
+    if (!region) {
+        return [];
+    }
+    return sourceContent
+        .slice(region.start, region.end)
+        .split('\n')
+        .filter((line) => line.startsWith('- '));
+}
+function derivedRegionMatches(sourceContent, links) {
+    const region = findDerivedRegion(sourceContent);
+    if (!region) {
+        return links.length === 0;
+    }
+    const lines = sourceContent.slice(region.start, region.endAfter).split('\n');
+    if (lines[0] !== DERIVED_START ||
+        lines[1] !== '## 衍生内容' ||
+        lines[lines.length - 1] !== DERIVED_END) {
+        return false;
+    }
+    const actualLinks = lines.slice(2, -1).sort();
+    return JSON.stringify(actualLinks) === JSON.stringify([...links].sort());
 }
 function withoutDerivedRegion(sourceContent) {
     const region = findDerivedRegion(sourceContent);
@@ -54,6 +120,45 @@ function updatePackPublication(packContent, status, approvedItems, links, update
         approvedItems,
         updatedAt,
     });
+}
+function revokePackPublication(packContent, approvedItems, revokedItems, links, revokedAt, updatedAt) {
+    const document = (0, gray_matter_1.default)(packContent);
+    const body = upsertManagedRegion(document.content, PUBLISHED_START, PUBLISHED_END, ['## 已发布内容', '', ...links].join('\n'));
+    return gray_matter_1.default.stringify(body, {
+        ...document.data,
+        status: 'revoked',
+        approvedItems,
+        revokedItems,
+        revokedAt,
+        updatedAt,
+    });
+}
+function hasExactPublishedLink(packContent, link) {
+    const document = (0, gray_matter_1.default)(packContent);
+    const region = findManagedRegion(document.content, PUBLISHED_START, PUBLISHED_END, '加工包已发布内容');
+    if (!region) {
+        return false;
+    }
+    return document.content
+        .slice(region.start, region.end)
+        .split('\n')
+        .filter((line) => line === link)
+        .length === 1;
+}
+function publishedRegionMatches(packContent, links) {
+    const document = (0, gray_matter_1.default)(packContent);
+    const region = findManagedRegion(document.content, PUBLISHED_START, PUBLISHED_END, '加工包已发布内容');
+    if (!region) {
+        return links.length === 0;
+    }
+    const expected = [
+        PUBLISHED_START,
+        '## 已发布内容',
+        '',
+        ...links,
+        PUBLISHED_END,
+    ].join('\n');
+    return document.content.slice(region.start, region.endAfter) === expected;
 }
 function updatePackReview(packContent, manifest, updatedAt) {
     const document = (0, gray_matter_1.default)(packContent);
@@ -113,6 +218,22 @@ function upsertManagedRegion(content, startMarker, endMarker, body) {
         throw new command_error_1.CommandError('MANIFEST_INVALID', '加工包已发布内容起止标记顺序错误');
     }
     return `${content.slice(0, start)}${startMarker}\n${body}\n${content.slice(end)}`;
+}
+function findManagedRegion(content, startMarker, endMarker, label) {
+    const startCount = content.split(startMarker).length - 1;
+    const endCount = content.split(endMarker).length - 1;
+    if (startCount === 0 && endCount === 0) {
+        return null;
+    }
+    if (startCount !== 1 || endCount !== 1) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', `${label}受控区域损坏`);
+    }
+    const start = content.indexOf(startMarker);
+    const end = content.indexOf(endMarker);
+    if (end < start) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', `${label}起止标记顺序错误`);
+    }
+    return { start, end, endAfter: end + endMarker.length };
 }
 function renderPack(input) {
     const l2 = input.manifest.atomicNotes.length > 0

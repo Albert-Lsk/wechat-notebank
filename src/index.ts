@@ -8,6 +8,8 @@ import { doctorCommand } from './commands/doctor';
 import { createPackCommand } from './commands/pack';
 import { approvePackCommand } from './commands/pack-approve';
 import { updatePackCommand } from './commands/pack-update';
+import { rejectPackCommand } from './commands/pack-reject';
+import { revokePackCommand } from './commands/pack-revoke';
 import { configExists } from './lib/config';
 import {
   isJsonOutputRequested,
@@ -19,6 +21,8 @@ import {
   parsePackCreateArgs,
   parsePackApproveArgs,
   parsePackUpdateArgs,
+  parsePackRejectArgs,
+  parsePackRevokeArgs,
   parseSetupArgs,
 } from './lib/cli';
 import { writeJsonOutput } from './lib/command-output';
@@ -39,13 +43,17 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                                           配置全局默认或项目覆盖
   alskai-notebank setup --agents <codex|claude|codex,claude> [--dry-run] [--json]
                                           安装或更新 Agent 集成（macOS Apple Silicon）
-  alskai-notebank doctor [--json]          只读诊断环境、CLI、Skill 与配置
+  alskai-notebank doctor [--json]          只读诊断环境、配置与加工包完整性
   alskai-notebank pack create --source <file> --manifest <manifest.json> [--json]
                                           创建或修订待审核加工包
   alskai-notebank pack update <pack> --manifest <manifest.json> [--json]
                                           记录 L4 用户回答与 Agent 整理稿
   alskai-notebank pack approve <pack> --items <ids> [--json]
                                           选择性发布 L2/L3/L4 候选内容
+  alskai-notebank pack reject <pack> [--json]
+                                          拒绝待审核加工包
+  alskai-notebank pack revoke <pack> --items <ids> [--json]
+                                          撤销已发布的候选内容
   alskai-notebank <url> [--output <folder>] [--json]
                                           存档文章
   alskai-notebank import <Excel文件地址> [--json]
@@ -65,6 +73,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank pack create --source ./原文.md --manifest ./manifest.json --json
   alskai-notebank pack update ./Inbox/待审核加工包.md --manifest ./manifest.json --json
   alskai-notebank pack approve ./Inbox/待审核加工包.md --items L2-01,L3-02 --json
+  alskai-notebank pack reject ./Inbox/待审核加工包.md --json
+  alskai-notebank pack revoke ./Inbox/待审核加工包.md --items L2-01 --json
   alskai-notebank import ./articles.xlsx
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
 
@@ -209,7 +219,11 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
       ? 'pack.approve'
       : operation === 'update'
         ? 'pack.update'
-        : 'pack.create';
+        : operation === 'reject'
+          ? 'pack.reject'
+          : operation === 'revoke'
+            ? 'pack.revoke'
+          : 'pack.create';
     try {
       if (operation === 'approve') {
         const packArgs = parsePackApproveArgs(args);
@@ -238,6 +252,36 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
           });
         } else {
           console.log(`✅ 加工包审核回答已更新: ${result.packFile}`);
+        }
+        return;
+      }
+      if (operation === 'reject') {
+        const packArgs = parsePackRejectArgs(args);
+        const result = await rejectPackCommand(packArgs);
+        if (packArgs.json) {
+          writeJsonOutput({
+            ok: true,
+            command: 'pack.reject',
+            status: result.action === 'reuse' ? 'unchanged' : 'rejected',
+            result,
+          });
+        } else {
+          console.log(`✅ 加工包已拒绝: ${result.packFile}`);
+        }
+        return;
+      }
+      if (operation === 'revoke') {
+        const packArgs = parsePackRevokeArgs(args);
+        const result = await revokePackCommand(packArgs);
+        if (packArgs.json) {
+          writeJsonOutput({
+            ok: true,
+            command: 'pack.revoke',
+            status: result.action === 'reuse' ? 'unchanged' : 'revoked',
+            result,
+          });
+        } else {
+          console.log(`✅ 已撤销加工包候选: ${result.revokedItems.join(', ')}`);
         }
         return;
       }

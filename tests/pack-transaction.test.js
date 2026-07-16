@@ -400,6 +400,12 @@ function snapshot(root) {
     '0'
   );
   assert.strictEqual(fs.readFileSync(conflictFile, 'utf8'), 'A 用户并发修改。\n');
+  await commitFileTransaction(targetLinkVault, []);
+  assert.strictEqual(
+    fs.readFileSync(conflictFile, 'utf8'),
+    'A 用户并发修改。\n',
+    'subsequent recovery must retain conflict evidence from a conflicted transaction'
+  );
 
   const finalCheckA = path.join(targetLinkVault, 'final-check-a.md');
   const finalCheckB = path.join(targetLinkVault, 'final-check-b.md');
