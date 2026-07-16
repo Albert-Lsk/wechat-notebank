@@ -93,6 +93,52 @@ function runCli(args, homePath) {
     1
   );
 
+  const expiredAt = new Date(Date.now() - 60_000);
+  const missingOwnerArchivePath = path.join(tempHome, 'missing-owner-archive');
+  const missingOwnerUrl = 'https://mp.weixin.qq.com/s/missing-owner';
+  const missingOwnerLockName = createHash('sha256').update(missingOwnerUrl).digest('hex');
+  const missingOwnerLockPath = path.join(
+    missingOwnerArchivePath,
+    '.alskai-notebank-locks',
+    `${missingOwnerLockName}.lock`
+  );
+  fs.mkdirSync(missingOwnerLockPath, { recursive: true });
+  fs.utimesSync(missingOwnerLockPath, expiredAt, expiredAt);
+  const missingOwnerResult = await runCli(
+    ['fetch', missingOwnerUrl, '--output', missingOwnerArchivePath, '--json'],
+    tempHome
+  );
+  assert.strictEqual(
+    missingOwnerResult.status,
+    0,
+    missingOwnerResult.stderr || missingOwnerResult.stdout
+  );
+
+  const reusedPidArchivePath = path.join(tempHome, 'reused-pid-archive');
+  const reusedPidUrl = 'https://mp.weixin.qq.com/s/reused-pid';
+  const reusedPidLockName = createHash('sha256').update(reusedPidUrl).digest('hex');
+  const reusedPidLockPath = path.join(
+    reusedPidArchivePath,
+    '.alskai-notebank-locks',
+    `${reusedPidLockName}.lock`
+  );
+  fs.mkdirSync(reusedPidLockPath, { recursive: true });
+  const reusedPidOwnerPath = path.join(reusedPidLockPath, 'owner.json');
+  fs.writeFileSync(
+    reusedPidOwnerPath,
+    JSON.stringify({ pid: process.pid, token: 'owner-from-old-process' })
+  );
+  fs.utimesSync(reusedPidOwnerPath, expiredAt, expiredAt);
+  const reusedPidResult = await runCli(
+    ['fetch', reusedPidUrl, '--output', reusedPidArchivePath, '--json'],
+    tempHome
+  );
+  assert.strictEqual(
+    reusedPidResult.status,
+    0,
+    reusedPidResult.stderr || reusedPidResult.stdout
+  );
+
   console.log('fetch concurrency tests passed');
 })().catch((error) => {
   console.error(error);

@@ -7,6 +7,8 @@ import { ArticleMeta } from '../types';
 const MAX_FILENAME_BYTES = 240;
 const SOURCE_LOCK_RETRY_MS = 25;
 const SOURCE_LOCK_TIMEOUT_MS = 60_000;
+const SOURCE_LOCK_HEARTBEAT_MS = 10_000;
+const SOURCE_LOCK_STALE_MS = 45_000;
 const SOURCE_LOCK_OWNER_FILE = 'owner.json';
 
 interface SourceLockOwner {
@@ -163,20 +165,40 @@ export async function withSourceUrlLock<T>(
     }
   }
 
+  const ownerPath = path.join(lockPath, SOURCE_LOCK_OWNER_FILE);
+  const heartbeat = setInterval(() => {
+    const now = new Date();
+    void fs.utimes(ownerPath, now, now).catch(() => {});
+  }, SOURCE_LOCK_HEARTBEAT_MS);
+  heartbeat.unref();
+
   try {
     return await action();
   } finally {
+    clearInterval(heartbeat);
     await releaseOwnedLock(lockPath, owner);
   }
 }
 
 async function quarantineAbandonedLock(lockPath: string): Promise<boolean> {
-  const owner = await readSourceLockOwner(lockPath);
-  if (!owner || isProcessAlive(owner.pid)) {
+  const inspection = await inspectSourceLock(lockPath);
+  if (!inspection) {
+    return true;
+  }
+
+  const { owner, stat } = inspection;
+  const leaseModifiedAt = owner
+    ? (await fs.stat(path.join(lockPath, SOURCE_LOCK_OWNER_FILE))).mtimeMs
+    : stat.mtimeMs;
+  const leaseExpired = Date.now() - leaseModifiedAt >= SOURCE_LOCK_STALE_MS;
+  if (!leaseExpired && (!owner || isProcessAlive(owner.pid))) {
     return false;
   }
 
-  const quarantinePath = `${lockPath}.stale-${owner.token}`;
+  const lockIdentity = owner?.token || createHash('sha256')
+    .update(`${stat.dev}:${stat.ino}:${stat.birthtimeMs}`)
+    .digest('hex');
+  const quarantinePath = `${lockPath}.stale-${lockIdentity}`;
   try {
     await fs.rename(lockPath, quarantinePath);
     return true;
@@ -186,6 +208,21 @@ async function quarantineAbandonedLock(lockPath: string): Promise<boolean> {
     }
     if (isLockConflict(error)) {
       return false;
+    }
+    throw error;
+  }
+}
+
+async function inspectSourceLock(
+  lockPath: string
+): Promise<{ owner: SourceLockOwner | null; stat: fs.Stats } | null> {
+  try {
+    const stat = await fs.stat(lockPath);
+    const owner = await readSourceLockOwner(lockPath);
+    return { owner, stat };
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return null;
     }
     throw error;
   }
