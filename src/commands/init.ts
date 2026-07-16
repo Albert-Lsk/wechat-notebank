@@ -1,9 +1,38 @@
 import * as inquirer from 'inquirer';
+import * as fs from 'fs-extra';
 import * as path from 'path';
 import { ensureDirectories, FOLDER_L1, FOLDER_L2, FOLDER_L3, FOLDER_L4 } from '../lib/storage';
-import { createConfig, readConfig } from '../lib/config';
+import {
+  createConfig,
+  getConfigPath,
+  readConfig,
+  readScopedConfig,
+  writeConfig,
+} from '../lib/config';
+import { InitArgs } from '../lib/cli';
+import { ConfigScope, StoredWechatNotebankConfig } from '../types';
+import { CommandError, getErrorMessage } from '../lib/command-error';
 
-export async function initCommand(): Promise<void> {
+export interface InitCommandResult {
+  scope: ConfigScope;
+  configFile: string;
+  archivePath: string;
+  processingGoal: string | null;
+  autoProcess: boolean;
+}
+
+export async function initCommand(args?: InitArgs): Promise<InitCommandResult | void> {
+  if (args?.hasOptions) {
+    if (!args.scope) {
+      throw new Error('请提供 --scope <global|project>');
+    }
+    if (!args.archivePath) {
+      throw new Error('请提供 --archive-path <path>');
+    }
+
+    return initializeScopedConfig(args);
+  }
+
   console.log('🤖 首次使用！请完成初始化...\n');
 
   const config = await readConfig();
@@ -62,6 +91,48 @@ export async function initCommand(): Promise<void> {
 
   printSuccess(basePath);
   console.log('\n开始使用：wechat-notebank fetch <文章链接>');
+}
+
+async function initializeScopedConfig(args: InitArgs): Promise<InitCommandResult> {
+  const scope = args.scope as ConfigScope;
+  const archivePath = args.archivePath as string;
+  const resolvedArchivePath = path.resolve(archivePath.replace(/^~/, process.env.HOME || ''));
+  let existingConfig: StoredWechatNotebankConfig | null;
+  try {
+    existingConfig = await readScopedConfig(scope);
+  } catch (error) {
+    throw new CommandError('CONFIG_INVALID', getErrorMessage(error));
+  }
+  const config: StoredWechatNotebankConfig = {
+    ...existingConfig,
+    name: existingConfig?.name ?? 'MyNotes',
+    archivePath: resolvedArchivePath,
+    createdAt: existingConfig?.createdAt ?? new Date().toISOString(),
+  };
+
+  if (args.processingGoalProvided) {
+    config.processingGoal = (args.processingGoal ?? '').trim();
+  }
+  if (args.autoProcess !== undefined) {
+    config.autoProcess = args.autoProcess;
+  } else if (scope === 'global' && config.autoProcess === undefined) {
+    config.autoProcess = false;
+  }
+
+  try {
+    await fs.ensureDir(resolvedArchivePath);
+    await writeConfig(config, scope);
+  } catch (error) {
+    throw new CommandError('TRANSACTION_FAILED', getErrorMessage(error));
+  }
+
+  return {
+    scope,
+    configFile: getConfigPath(scope),
+    archivePath: resolvedArchivePath,
+    processingGoal: config.processingGoal?.trim() || null,
+    autoProcess: config.autoProcess ?? false,
+  };
 }
 
 function printSuccess(basePath: string): void {

@@ -36,29 +36,75 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getConfigPath = getConfigPath;
 exports.configExists = configExists;
 exports.readConfig = readConfig;
+exports.readScopedConfig = readScopedConfig;
 exports.writeConfig = writeConfig;
 exports.createConfig = createConfig;
 const fs = __importStar(require("fs-extra"));
+const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const storage_1 = require("./storage");
 const CONFIG_FILE = '.wechat-notebank.json';
-function getConfigPath() {
+const GLOBAL_CONFIG_DIR = 'alskai-notebank';
+function getConfigPath(scope = 'project') {
+    if (scope === 'global') {
+        const homePath = process.env.HOME || os.homedir();
+        return path.join(homePath, '.config', GLOBAL_CONFIG_DIR, 'config.json');
+    }
     return path.resolve(process.cwd(), CONFIG_FILE);
 }
 async function configExists() {
-    return fs.pathExists(getConfigPath());
+    return ((await fs.pathExists(getConfigPath('project'))) ||
+        (await fs.pathExists(getConfigPath('global'))));
 }
 async function readConfig() {
-    const configPath = getConfigPath();
+    const globalConfig = await readScopedConfig('global');
+    const projectConfig = await readScopedConfig('project');
+    if (!globalConfig && !projectConfig) {
+        return null;
+    }
+    const merged = {
+        ...globalConfig,
+        ...projectConfig,
+    };
+    if (!merged.archivePath) {
+        throw new Error('配置缺少有效的 archivePath');
+    }
+    return {
+        ...merged,
+        archivePath: merged.archivePath,
+        processingGoal: merged.processingGoal?.trim() || undefined,
+        autoProcess: merged.autoProcess ?? false,
+    };
+}
+async function readScopedConfig(scope) {
+    const configPath = getConfigPath(scope);
     if (!(await fs.pathExists(configPath))) {
         return null;
     }
-    const data = await fs.readJson(configPath);
+    let data;
+    try {
+        data = await fs.readJson(configPath);
+    }
+    catch (error) {
+        throw new Error(`无法解析配置 ${configPath}: ${getErrorMessage(error)}`);
+    }
+    validateStoredConfig(data, configPath);
     return data;
 }
-async function writeConfig(config) {
-    const configPath = getConfigPath();
-    await fs.writeJson(configPath, config, { spaces: 2 });
+async function writeConfig(config, scope = 'project') {
+    const configPath = getConfigPath(scope);
+    const tempPath = `${configPath}.tmp-${process.pid}`;
+    validateStoredConfig(config, configPath);
+    await fs.ensureDir(path.dirname(configPath));
+    try {
+        await fs.writeJson(tempPath, config, { spaces: 2 });
+        await fs.rename(tempPath, configPath);
+    }
+    finally {
+        if (await fs.pathExists(tempPath)) {
+            await fs.remove(tempPath);
+        }
+    }
 }
 async function createConfig(name, basePath) {
     const config = {
@@ -68,4 +114,29 @@ async function createConfig(name, basePath) {
     };
     await writeConfig(config);
     return config;
+}
+function validateStoredConfig(data, configPath) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error(`配置格式无效: ${configPath}`);
+    }
+    const config = data;
+    validateOptionalString(config, 'name', configPath, false);
+    validateOptionalString(config, 'archivePath', configPath, false);
+    validateOptionalString(config, 'createdAt', configPath, false);
+    validateOptionalString(config, 'processingGoal', configPath, true);
+    if (config.autoProcess !== undefined && typeof config.autoProcess !== 'boolean') {
+        throw new Error(`配置字段 autoProcess 必须是布尔值: ${configPath}`);
+    }
+}
+function validateOptionalString(config, key, configPath, allowEmpty) {
+    const value = config[key];
+    if (value === undefined) {
+        return;
+    }
+    if (typeof value !== 'string' || (!allowEmpty && value.trim().length === 0)) {
+        throw new Error(`配置字段 ${key} 必须是${allowEmpty ? '' : '非空'}字符串: ${configPath}`);
+    }
+}
+function getErrorMessage(error) {
+    return error instanceof Error ? error.message : String(error);
 }

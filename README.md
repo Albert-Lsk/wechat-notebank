@@ -155,7 +155,9 @@ $HOME\WeChatArticles
 
 | 命令 | 说明 |
 |------|------|
-| `alskai-notebank init` | 初始化默认知识库路径 |
+| `alskai-notebank init` | 使用原有引导初始化项目知识库 |
+| `alskai-notebank init --scope global --archive-path <folder>` | 设置用户全局默认配置 |
+| `alskai-notebank init --scope project --archive-path <folder>` | 设置当前项目覆盖配置 |
 | `alskai-notebank <url>` | 保存单篇文章到默认路径 |
 | `alskai-notebank fetch <url>` | 保存单篇文章，和上面等价 |
 | `alskai-notebank <url> --output <folder>` | 保存到指定目录 |
@@ -259,17 +261,37 @@ your-knowledge-base/
 
 ## 配置文件
 
-配置文件 `.wechat-notebank.json` 位于当前工作目录：
+全局默认配置位于 `~/.config/alskai-notebank/config.json`，项目覆盖配置 `.wechat-notebank.json` 位于当前工作目录。项目配置只覆盖其中明确写入的字段，其余值继承全局配置。
+
+可以直接用非交互命令创建或更新配置：
+
+```bash
+alskai-notebank init --scope global \
+  --archive-path ~/WeChatArticles \
+  --processing-goal "提炼可复用的观点" \
+  --auto-process
+
+alskai-notebank init --scope project \
+  --archive-path ./project-articles \
+  --no-auto-process \
+  --json
+```
+
+`processingGoal` 是可选自然语言；传入空字符串可清除当前 scope 的目标。`autoProcess` 未在任何配置中设置时默认为 `false`。初始化命令可以重复执行，省略的可选字段会保留原值。
+
+配置文件示例：
 
 ```json
 {
   "name": "MyNotes",
   "archivePath": "./output/L1_原文/WeChat",
-  "createdAt": "2026-04-13T10:30:00Z"
+  "createdAt": "2026-04-13T10:30:00Z",
+  "processingGoal": "提炼可复用的观点",
+  "autoProcess": false
 }
 ```
 
-如果命令里传了 `--output` 或 `-o`，会优先使用命令指定的输出目录。
+配置优先级为：当次命令参数、项目配置、全局默认配置、首次使用引导。如果命令里传了 `--output` 或 `-o`，会优先使用命令指定的输出目录。项目配置损坏时会直接报错，不会静默回退到全局配置。
 
 ## 常见问题
 

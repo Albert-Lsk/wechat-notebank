@@ -13,12 +13,16 @@ export interface Article extends ArticleMeta {
 }
 
 export interface WechatNotebankConfig {
-  name: string;
+  name?: string;
   archivePath: string;
-  createdAt: string;
+  createdAt?: string;
   processingGoal?: string;
   autoProcess?: boolean;
 }
+
+export type StoredWechatNotebankConfig = Partial<WechatNotebankConfig>;
+
+export type ConfigScope = 'global' | 'project';
 
 export interface ParseResult {
   title: string;

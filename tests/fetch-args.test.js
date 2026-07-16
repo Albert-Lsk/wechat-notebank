@@ -1,6 +1,11 @@
 const assert = require('assert');
 const packageJson = require('../package.json');
-const { normalizeCliArgs, parseFetchArgs, parseImportArgs } = require('../dist/lib/cli');
+const {
+  normalizeCliArgs,
+  parseFetchArgs,
+  parseImportArgs,
+  parseInitArgs,
+} = require('../dist/lib/cli');
 
 assert.deepStrictEqual(packageJson.bin, {
   'alskai-notebank': 'dist/index.js',
@@ -92,6 +97,62 @@ assert.throws(
 assert.throws(
   () => parseImportArgs(['/tmp/articles.xlsx', '--watch']),
   /Unknown import option/
+);
+
+assert.deepStrictEqual(parseInitArgs([]), {
+  scope: undefined,
+  archivePath: undefined,
+  processingGoal: undefined,
+  processingGoalProvided: false,
+  autoProcess: undefined,
+  json: false,
+  hasOptions: false,
+});
+
+assert.deepStrictEqual(
+  parseInitArgs([
+    '--scope',
+    'project',
+    '--archive-path',
+    '/tmp/project-archive',
+    '--processing-goal',
+    '提炼项目观点',
+    '--no-auto-process',
+    '--json',
+  ]),
+  {
+    scope: 'project',
+    archivePath: '/tmp/project-archive',
+    processingGoal: '提炼项目观点',
+    processingGoalProvided: true,
+    autoProcess: false,
+    json: true,
+    hasOptions: true,
+  }
+);
+
+assert.throws(
+  () => parseInitArgs([
+    '--scope',
+    'global',
+    '--archive-path',
+    '/tmp/global-archive',
+    '--processing-goal',
+    '--auto-process',
+  ]),
+  /--processing-goal requires text/
+);
+
+assert.throws(
+  () => parseInitArgs([
+    '--scope',
+    'global',
+    '--archive-path',
+    '/tmp/global-archive',
+    '--auto-process',
+    '--no-auto-process',
+  ]),
+  /cannot be used together/
 );
 
 console.log('fetch args tests passed');

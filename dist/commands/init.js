@@ -35,10 +35,21 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initCommand = initCommand;
 const inquirer = __importStar(require("inquirer"));
+const fs = __importStar(require("fs-extra"));
 const path = __importStar(require("path"));
 const storage_1 = require("../lib/storage");
 const config_1 = require("../lib/config");
-async function initCommand() {
+const command_error_1 = require("../lib/command-error");
+async function initCommand(args) {
+    if (args?.hasOptions) {
+        if (!args.scope) {
+            throw new Error('请提供 --scope <global|project>');
+        }
+        if (!args.archivePath) {
+            throw new Error('请提供 --archive-path <path>');
+        }
+        return initializeScopedConfig(args);
+    }
     console.log('🤖 首次使用！请完成初始化...\n');
     const config = await (0, config_1.readConfig)();
     if (config) {
@@ -86,6 +97,47 @@ async function initCommand() {
     await (0, config_1.createConfig)(name, basePath);
     printSuccess(basePath);
     console.log('\n开始使用：wechat-notebank fetch <文章链接>');
+}
+async function initializeScopedConfig(args) {
+    const scope = args.scope;
+    const archivePath = args.archivePath;
+    const resolvedArchivePath = path.resolve(archivePath.replace(/^~/, process.env.HOME || ''));
+    let existingConfig;
+    try {
+        existingConfig = await (0, config_1.readScopedConfig)(scope);
+    }
+    catch (error) {
+        throw new command_error_1.CommandError('CONFIG_INVALID', (0, command_error_1.getErrorMessage)(error));
+    }
+    const config = {
+        ...existingConfig,
+        name: existingConfig?.name ?? 'MyNotes',
+        archivePath: resolvedArchivePath,
+        createdAt: existingConfig?.createdAt ?? new Date().toISOString(),
+    };
+    if (args.processingGoalProvided) {
+        config.processingGoal = (args.processingGoal ?? '').trim();
+    }
+    if (args.autoProcess !== undefined) {
+        config.autoProcess = args.autoProcess;
+    }
+    else if (scope === 'global' && config.autoProcess === undefined) {
+        config.autoProcess = false;
+    }
+    try {
+        await fs.ensureDir(resolvedArchivePath);
+        await (0, config_1.writeConfig)(config, scope);
+    }
+    catch (error) {
+        throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
+    }
+    return {
+        scope,
+        configFile: (0, config_1.getConfigPath)(scope),
+        archivePath: resolvedArchivePath,
+        processingGoal: config.processingGoal?.trim() || null,
+        autoProcess: config.autoProcess ?? false,
+    };
 }
 function printSuccess(basePath) {
     console.log('\n✅ 初始化完成！');

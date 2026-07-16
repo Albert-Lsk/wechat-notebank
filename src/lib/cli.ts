@@ -1,3 +1,5 @@
+import { ConfigScope } from '../types';
+
 export interface FetchArgs {
   url: string | undefined;
   outputPath?: string;
@@ -6,6 +8,16 @@ export interface FetchArgs {
 
 export interface ImportArgs {
   filePath: string;
+}
+
+export interface InitArgs {
+  scope?: ConfigScope;
+  archivePath?: string;
+  processingGoal?: string;
+  processingGoalProvided: boolean;
+  autoProcess?: boolean;
+  json: boolean;
+  hasOptions: boolean;
 }
 
 export interface NormalizedCliArgs {
@@ -66,6 +78,84 @@ export function parseFetchArgs(args: string[]): FetchArgs {
   }
 
   return { url, outputPath, json };
+}
+
+export function parseInitArgs(args: string[]): InitArgs {
+  let scope: ConfigScope | undefined;
+  let archivePath: string | undefined;
+  let processingGoal: string | undefined;
+  let processingGoalProvided = false;
+  let autoProcess: boolean | undefined;
+  let json = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const option = args[i];
+
+    if (isJsonOutputOption(option)) {
+      json = true;
+      continue;
+    }
+
+    if (option === '--scope') {
+      const value = args[i + 1];
+      if (value !== 'global' && value !== 'project') {
+        throw new Error('--scope requires global or project');
+      }
+      scope = value;
+      i++;
+      continue;
+    }
+
+    if (option === '--archive-path') {
+      const value = args[i + 1];
+      if (!value || value.startsWith('-')) {
+        throw new Error('--archive-path requires a folder path');
+      }
+      archivePath = value;
+      i++;
+      continue;
+    }
+
+    if (option === '--processing-goal') {
+      const value = args[i + 1];
+      if (value === undefined || value.startsWith('--')) {
+        throw new Error('--processing-goal requires text');
+      }
+      processingGoal = value;
+      processingGoalProvided = true;
+      i++;
+      continue;
+    }
+
+    if (option === '--auto-process' || option === '--no-auto-process') {
+      const nextValue = option === '--auto-process';
+      if (autoProcess !== undefined && autoProcess !== nextValue) {
+        throw new Error('--auto-process and --no-auto-process cannot be used together');
+      }
+      autoProcess = nextValue;
+      continue;
+    }
+
+    throw new Error(`Unknown init option: ${option}`);
+  }
+
+  const hasOptions = args.length > 0;
+  if (hasOptions && !scope) {
+    throw new Error('请提供 --scope <global|project>');
+  }
+  if (hasOptions && !archivePath) {
+    throw new Error('请提供 --archive-path <path>');
+  }
+
+  return {
+    scope,
+    archivePath,
+    processingGoal,
+    processingGoalProvided,
+    autoProcess,
+    json,
+    hasOptions,
+  };
 }
 
 export function isJsonOutputRequested(args: string[]): boolean {

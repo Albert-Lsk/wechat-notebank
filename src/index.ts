@@ -8,6 +8,7 @@ import {
   isJsonOutputRequested,
   normalizeCliArgs,
   parseFetchArgs,
+  parseInitArgs,
   parseImportArgs,
 } from './lib/cli';
 import { writeJsonOutput } from './lib/command-output';
@@ -24,6 +25,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
 使用方法:
   alskai-notebank init                    初始化知识库
+  alskai-notebank init --scope <global|project> --archive-path <folder> [options]
+                                          配置全局默认或项目覆盖
   alskai-notebank <url> [--output <folder>] [--json]
                                           存档文章
   alskai-notebank import <Excel文件地址>   批量导入文章
@@ -46,7 +49,47 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
   // 初始化命令
   if (command === 'init') {
-    await initCommand();
+    const jsonRequested = isJsonOutputRequested(args);
+    let initArgs;
+    try {
+      initArgs = parseInitArgs(args);
+    } catch (error) {
+      const commandError = new CommandError('CLI_USAGE_ERROR', getErrorMessage(error));
+      if (jsonRequested) {
+        writeCommandJsonFailure('init', commandError);
+        return;
+      }
+      console.error(`❌ ${commandError.message}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    try {
+      const result = await initCommand(initArgs);
+      if (initArgs.json && result) {
+        writeJsonOutput({
+          ok: true,
+          command: 'init',
+          status: 'configured',
+          result,
+        });
+      } else if (result) {
+        console.log('✅ 配置已保存');
+        console.log(`📍 范围: ${result.scope}`);
+        console.log(`📄 配置: ${result.configFile}`);
+        console.log(`📁 归档: ${result.archivePath}`);
+      }
+    } catch (error) {
+      const commandError = error instanceof CommandError
+        ? error
+        : new CommandError('CONFIG_INVALID', getErrorMessage(error));
+      if (initArgs.json) {
+        writeCommandJsonFailure('init', commandError);
+        return;
+      }
+      console.error(`❌ ${commandError.message}`);
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -59,7 +102,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     } catch (error) {
       const message = error instanceof Error ? error.message : '参数错误';
       if (jsonRequested) {
-        writeFetchJsonFailure(new CommandError('CLI_USAGE_ERROR', message));
+        writeCommandJsonFailure('fetch', new CommandError('CLI_USAGE_ERROR', message));
         return;
       }
 
@@ -72,7 +115,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     const { url, outputPath, json } = fetchArgs;
     if (!url) {
       if (json) {
-        writeFetchJsonFailure(new CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
+        writeCommandJsonFailure('fetch', new CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
         return;
       }
 
@@ -105,7 +148,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
         : new CommandError('ARTICLE_UNAVAILABLE', getErrorMessage(error));
 
       if (json) {
-        writeFetchJsonFailure(commandError);
+        writeCommandJsonFailure('fetch', commandError);
         return;
       }
 
@@ -141,11 +184,11 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   process.exit(1);
 }
 
-function writeFetchJsonFailure(error: CommandError): void {
+function writeCommandJsonFailure(command: string, error: CommandError): void {
   console.error(`❌ ${error.message}`);
   writeJsonOutput({
     ok: false,
-    command: 'fetch',
+    command,
     status: 'failed',
     error: {
       code: error.code,

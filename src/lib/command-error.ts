@@ -1,4 +1,4 @@
-export type FetchErrorCode =
+export type CommandErrorCode =
   | 'CLI_USAGE_ERROR'
   | 'CONFIG_INVALID'
   | 'ARTICLE_UNAVAILABLE'
@@ -7,7 +7,7 @@ export type FetchErrorCode =
 
 export class CommandError extends Error {
   constructor(
-    public readonly code: FetchErrorCode,
+    public readonly code: CommandErrorCode,
     message: string
   ) {
     super(message);

@@ -18,6 +18,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
 使用方法:
   alskai-notebank init                    初始化知识库
+  alskai-notebank init --scope <global|project> --archive-path <folder> [options]
+                                          配置全局默认或项目覆盖
   alskai-notebank <url> [--output <folder>] [--json]
                                           存档文章
   alskai-notebank import <Excel文件地址>   批量导入文章
@@ -39,7 +41,49 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     }
     // 初始化命令
     if (command === 'init') {
-        await (0, init_1.initCommand)();
+        const jsonRequested = (0, cli_1.isJsonOutputRequested)(args);
+        let initArgs;
+        try {
+            initArgs = (0, cli_1.parseInitArgs)(args);
+        }
+        catch (error) {
+            const commandError = new command_error_1.CommandError('CLI_USAGE_ERROR', (0, command_error_1.getErrorMessage)(error));
+            if (jsonRequested) {
+                writeCommandJsonFailure('init', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
+            process.exitCode = 1;
+            return;
+        }
+        try {
+            const result = await (0, init_1.initCommand)(initArgs);
+            if (initArgs.json && result) {
+                (0, command_output_1.writeJsonOutput)({
+                    ok: true,
+                    command: 'init',
+                    status: 'configured',
+                    result,
+                });
+            }
+            else if (result) {
+                console.log('✅ 配置已保存');
+                console.log(`📍 范围: ${result.scope}`);
+                console.log(`📄 配置: ${result.configFile}`);
+                console.log(`📁 归档: ${result.archivePath}`);
+            }
+        }
+        catch (error) {
+            const commandError = error instanceof command_error_1.CommandError
+                ? error
+                : new command_error_1.CommandError('CONFIG_INVALID', (0, command_error_1.getErrorMessage)(error));
+            if (initArgs.json) {
+                writeCommandJsonFailure('init', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
+            process.exitCode = 1;
+        }
         return;
     }
     // fetch 命令
@@ -52,7 +96,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
         catch (error) {
             const message = error instanceof Error ? error.message : '参数错误';
             if (jsonRequested) {
-                writeFetchJsonFailure(new command_error_1.CommandError('CLI_USAGE_ERROR', message));
+                writeCommandJsonFailure('fetch', new command_error_1.CommandError('CLI_USAGE_ERROR', message));
                 return;
             }
             console.error(`❌ ${message}`);
@@ -63,7 +107,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
         const { url, outputPath, json } = fetchArgs;
         if (!url) {
             if (json) {
-                writeFetchJsonFailure(new command_error_1.CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
+                writeCommandJsonFailure('fetch', new command_error_1.CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
                 return;
             }
             console.error('❌ 请提供文章链接');
@@ -93,7 +137,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 ? error
                 : new command_error_1.CommandError('ARTICLE_UNAVAILABLE', (0, command_error_1.getErrorMessage)(error));
             if (json) {
-                writeFetchJsonFailure(commandError);
+                writeCommandJsonFailure('fetch', commandError);
                 return;
             }
             console.error(`\n❌ 错误: ${commandError.message}`);
@@ -126,11 +170,11 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     console.error('   使用 alskai-notebank --help 查看帮助');
     process.exit(1);
 }
-function writeFetchJsonFailure(error) {
+function writeCommandJsonFailure(command, error) {
     console.error(`❌ ${error.message}`);
     (0, command_output_1.writeJsonOutput)({
         ok: false,
-        command: 'fetch',
+        command,
         status: 'failed',
         error: {
             code: error.code,
