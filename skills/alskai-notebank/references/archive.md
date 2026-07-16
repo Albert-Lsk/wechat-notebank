@@ -36,6 +36,7 @@ For a Numbers workbook, export a temporary copy with macOS Numbers. Replace only
 
 ```bash
 (
+set -e
 input_file="/absolute/path/to/articles.numbers"
 temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/alskai-notebank-import.XXXXXX")"
 output_file="$temp_dir/articles.xlsx"
@@ -74,7 +75,7 @@ The `EXIT` trap removes the temporary export after the import command finishes o
 Apply this priority after reporting the archive result:
 
 1. If the user explicitly says “only save,” stop regardless of `result.autoProcess`.
-2. If the user explicitly requests saving and processing, hand each successfully saved file to the separate processing route and pass `result.processingGoal` as its optional goal.
+2. If the user explicitly requests saving and processing, hand each successfully saved file to the separate processing route. Use a processing goal stated in the current request; only when the request omits one, fall back to `result.processingGoal`.
 3. Otherwise, stop when `result.autoProcess` is `false`; when it is `true`, use the same processing handoff.
 
 For workbook results, `autoProcess` and `processingGoal` are fields of `result`, and only `result.items` with status `saved` are eligible for the handoff. For multiple direct URLs, apply the decision to each result. Do not implement processing or load review instructions in this archive reference.
