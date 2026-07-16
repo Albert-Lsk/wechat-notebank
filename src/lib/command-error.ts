@@ -7,6 +7,10 @@ export type CommandErrorCode =
   | 'CONFIG_INVALID'
   | 'ARTICLE_UNAVAILABLE'
   | 'ARTICLE_PARSE_FAILED'
+  | 'MANIFEST_INVALID'
+  | 'QUOTE_NOT_FOUND'
+  | 'PACK_ALREADY_EXISTS'
+  | 'DERIVED_FILE_MODIFIED'
   | 'TRANSACTION_FAILED';
 
 export class CommandError extends Error {

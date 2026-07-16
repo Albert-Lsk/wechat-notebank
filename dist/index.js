@@ -6,6 +6,7 @@ const fetch_1 = require("./commands/fetch");
 const import_1 = require("./commands/import");
 const setup_1 = require("./commands/setup");
 const doctor_1 = require("./commands/doctor");
+const pack_1 = require("./commands/pack");
 const config_1 = require("./lib/config");
 const cli_1 = require("./lib/cli");
 const command_output_1 = require("./lib/command-output");
@@ -25,6 +26,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank setup --agents <codex|claude|codex,claude> [--dry-run] [--json]
                                           安装或更新 Agent 集成（macOS Apple Silicon）
   alskai-notebank doctor [--json]          只读诊断环境、CLI、Skill 与配置
+  alskai-notebank pack create --source <file> --manifest <manifest.json> [--json]
+                                          创建或修订待审核加工包
   alskai-notebank <url> [--output <folder>] [--json]
                                           存档文章
   alskai-notebank import <Excel文件地址> [--json]
@@ -41,6 +44,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank https://mp.weixin.qq.com/s/xxx -o ~/WeChatArticles
   alskai-notebank setup --agents codex --dry-run --json
   alskai-notebank doctor --json
+  alskai-notebank pack create --source ./原文.md --manifest ./manifest.json --json
   alskai-notebank import ./articles.xlsx
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
 
@@ -171,6 +175,40 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 : new command_error_1.CommandError('CLI_USAGE_ERROR', (0, command_error_1.getErrorMessage)(error));
             if (jsonRequested) {
                 writeCommandJsonFailure('doctor', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
+            process.exitCode = 1;
+        }
+        return;
+    }
+    if (command === 'pack') {
+        const jsonRequested = (0, cli_1.isJsonOutputRequested)(args);
+        try {
+            const packArgs = (0, cli_1.parsePackCreateArgs)(args);
+            const result = await (0, pack_1.createPackCommand)(packArgs);
+            if (packArgs.json) {
+                (0, command_output_1.writeJsonOutput)({
+                    ok: true,
+                    command: 'pack.create',
+                    status: result.action === 'reuse'
+                        ? 'unchanged'
+                        : result.action === 'revise'
+                            ? 'revised'
+                            : 'created',
+                    result,
+                });
+            }
+            else {
+                console.log(`✅ 待审核加工包已创建: ${result.packFile}`);
+            }
+        }
+        catch (error) {
+            const commandError = error instanceof command_error_1.CommandError
+                ? error
+                : new command_error_1.CommandError('CLI_USAGE_ERROR', (0, command_error_1.getErrorMessage)(error));
+            if (jsonRequested) {
+                writeCommandJsonFailure('pack.create', commandError);
                 return;
             }
             console.error(`❌ ${commandError.message}`);

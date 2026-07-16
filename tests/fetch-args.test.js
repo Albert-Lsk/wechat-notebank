@@ -5,6 +5,7 @@ const {
   parseFetchArgs,
   parseImportArgs,
   parseInitArgs,
+  parsePackCreateArgs,
 } = require('../dist/lib/cli');
 
 assert.deepStrictEqual(packageJson.bin, {
@@ -106,6 +107,32 @@ assert.throws(
 assert.throws(
   () => parseImportArgs(['/tmp/articles.xlsx', '--watch']),
   /Unknown import option/
+);
+
+assert.deepStrictEqual(
+  parsePackCreateArgs([
+    'create',
+    '--source',
+    '/tmp/vault/L1_原文/WeChat/source.md',
+    '--manifest',
+    '/tmp/manifest.json',
+    '--json',
+  ]),
+  {
+    sourceFile: '/tmp/vault/L1_原文/WeChat/source.md',
+    manifestFile: '/tmp/manifest.json',
+    json: true,
+  }
+);
+
+assert.throws(
+  () => parsePackCreateArgs(['create', '--manifest', '/tmp/manifest.json']),
+  /--source/
+);
+
+assert.throws(
+  () => parsePackCreateArgs(['create', '--source', '/tmp/source.md', '--watch']),
+  /Unknown pack create option/
 );
 
 assert.deepStrictEqual(parseInitArgs([]), {

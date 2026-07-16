@@ -4,6 +4,7 @@ exports.normalizeCliArgs = normalizeCliArgs;
 exports.parseFetchArgs = parseFetchArgs;
 exports.parseSetupArgs = parseSetupArgs;
 exports.parseDoctorArgs = parseDoctorArgs;
+exports.parsePackCreateArgs = parsePackCreateArgs;
 exports.parseInitArgs = parseInitArgs;
 exports.isJsonOutputRequested = isJsonOutputRequested;
 exports.parseImportArgs = parseImportArgs;
@@ -90,6 +91,44 @@ function parseDoctorArgs(args) {
         throw new Error(`Unknown doctor option: ${option}`);
     }
     return { json };
+}
+function parsePackCreateArgs(args) {
+    const [operation, ...options] = args;
+    if (operation !== 'create') {
+        throw new Error('pack requires create');
+    }
+    let sourceFile;
+    let manifestFile;
+    let json = false;
+    for (let index = 0; index < options.length; index++) {
+        const option = options[index];
+        if (isJsonOutputOption(option)) {
+            json = true;
+            continue;
+        }
+        if (option === '--source' || option === '--manifest') {
+            const value = options[index + 1];
+            if (!value || value.startsWith('--')) {
+                throw new Error(`${option} requires a file path`);
+            }
+            if (option === '--source') {
+                sourceFile = value;
+            }
+            else {
+                manifestFile = value;
+            }
+            index++;
+            continue;
+        }
+        throw new Error(`Unknown pack create option: ${option}`);
+    }
+    if (!sourceFile) {
+        throw new Error('请提供 --source <file>');
+    }
+    if (!manifestFile) {
+        throw new Error('请提供 --manifest <file>');
+    }
+    return { sourceFile, manifestFile, json };
 }
 function parseInitArgs(args) {
     if (args.length === 0) {

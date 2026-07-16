@@ -178,6 +178,7 @@ $HOME\WeChatArticles
 | `alskai-notebank init --scope project --archive-path <folder>` | 设置当前项目覆盖配置 |
 | `alskai-notebank setup --agents <targets> [--dry-run] --json` | 安装或更新指定 Agent 集成 |
 | `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill 与配置 |
+| `alskai-notebank pack create --source <file> --manifest <manifest.json> --json` | 创建或修订待审核加工包 |
 | `alskai-notebank <url>` | 保存单篇文章到默认路径 |
 | `alskai-notebank fetch <url>` | 保存单篇文章，和上面等价 |
 | `alskai-notebank <url> --output <folder>` | 保存到指定目录 |
@@ -191,6 +192,33 @@ $HOME\WeChatArticles
 wechat-notebank fetch <url> -o <folder>
 wechat-notebank import <file.xlsx>
 ```
+
+### 创建待审核加工包
+
+Agent 根据原文生成 Manifest v1 后，可调用确定性命令创建加工包：
+
+```bash
+alskai-notebank pack create \
+  --source "$HOME/WeChatArticles/L1_原文/WeChat/原文.md" \
+  --manifest /tmp/manifest.json \
+  --json
+```
+
+Manifest v1 顶层字段固定为：
+
+```json
+{
+  "schemaVersion": 1,
+  "sourceFile": "/absolute/path/to/L1_原文/WeChat/原文.md",
+  "sourceUrl": "https://mp.weixin.qq.com/s/xxx",
+  "processingGoal": null,
+  "atomicNotes": [],
+  "materials": [],
+  "reviewQuestions": []
+}
+```
+
+命令会在 `Inbox` 创建可见的待审核 Markdown，在 `.alskai-notebank/packs` 保存机器状态，并在加工包与原文之间建立 Wiki 双链。相同来源、相同加工目标和相同 Manifest 重复执行不会改写文件；内容变化时创建新 revision，并保留旧 revision。
 
 ## 输出文件
 
