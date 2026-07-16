@@ -45,14 +45,13 @@ exports.findArticleBySourceUrl = findArticleBySourceUrl;
 exports.withSourceUrlLock = withSourceUrlLock;
 exports.getL1Path = getL1Path;
 const fs = __importStar(require("fs-extra"));
-const fs_1 = require("fs");
 const crypto_1 = require("crypto");
 const path = __importStar(require("path"));
 const gray_matter_1 = __importDefault(require("gray-matter"));
 const MAX_FILENAME_BYTES = 240;
 const SOURCE_LOCK_RETRY_MS = 25;
 const SOURCE_LOCK_TIMEOUT_MS = 60000;
-const ABANDONED_LOCK_AGE_MS = 5 * 60000;
+const SOURCE_LOCK_OWNER_FILE = 'owner.json';
 exports.FOLDER_L1 = 'L1_原文'; // 公众号文章原文
 exports.FOLDER_L2 = 'L2_原子卡片'; // 文章的原子想法卡片
 exports.FOLDER_L3 = 'L3_引用素材'; // 可以直接引用的素材
@@ -129,56 +128,114 @@ async function withSourceUrlLock(archivePath, sourceUrl, action) {
     const lockName = (0, crypto_1.createHash)('sha256').update(sourceUrl).digest('hex');
     const lockPath = path.join(lockDirectory, `${lockName}.lock`);
     await fs.ensureDir(lockDirectory);
+    const owner = {
+        pid: process.pid,
+        token: (0, crypto_1.randomUUID)(),
+    };
+    const candidatePath = `${lockPath}.candidate-${owner.token}`;
+    try {
+        await fs.ensureDir(candidatePath);
+        await fs.writeJson(path.join(candidatePath, SOURCE_LOCK_OWNER_FILE), owner);
+    }
+    catch (error) {
+        await fs.remove(candidatePath);
+        throw error;
+    }
     const startedAt = Date.now();
-    let lockHandle;
-    while (!lockHandle) {
-        try {
-            lockHandle = await fs_1.promises.open(lockPath, 'wx');
-            await lockHandle.writeFile(String(process.pid), 'utf8');
+    let acquired = false;
+    try {
+        while (!acquired) {
+            try {
+                await fs.rename(candidatePath, lockPath);
+                acquired = true;
+            }
+            catch (error) {
+                if (!isLockConflict(error)) {
+                    throw error;
+                }
+                if (await quarantineAbandonedLock(lockPath)) {
+                    continue;
+                }
+                if (Date.now() - startedAt >= SOURCE_LOCK_TIMEOUT_MS) {
+                    throw new Error(`等待来源归档锁超时: ${sourceUrl}`);
+                }
+                await delay(SOURCE_LOCK_RETRY_MS);
+            }
         }
-        catch (error) {
-            if (!hasErrorCode(error, 'EEXIST')) {
-                throw error;
-            }
-            if (await removeAbandonedLock(lockPath)) {
-                continue;
-            }
-            if (Date.now() - startedAt >= SOURCE_LOCK_TIMEOUT_MS) {
-                throw new Error(`等待来源归档锁超时: ${sourceUrl}`);
-            }
-            await delay(SOURCE_LOCK_RETRY_MS);
+    }
+    finally {
+        if (!acquired) {
+            await fs.remove(candidatePath);
         }
     }
     try {
         return await action();
     }
     finally {
-        await lockHandle.close();
-        await fs.remove(lockPath);
+        await releaseOwnedLock(lockPath, owner);
     }
 }
-async function removeAbandonedLock(lockPath) {
+async function quarantineAbandonedLock(lockPath) {
+    const owner = await readSourceLockOwner(lockPath);
+    if (!owner || isProcessAlive(owner.pid)) {
+        return false;
+    }
+    const quarantinePath = `${lockPath}.stale-${owner.token}`;
     try {
-        const [ownerText, stat] = await Promise.all([
-            fs_1.promises.readFile(lockPath, 'utf8'),
-            fs_1.promises.stat(lockPath),
-        ]);
-        const ownerPid = Number(ownerText);
-        const ownerIsGone = Number.isInteger(ownerPid) && ownerPid > 0
-            ? !isProcessAlive(ownerPid)
-            : Date.now() - stat.mtimeMs >= ABANDONED_LOCK_AGE_MS;
-        if (!ownerIsGone) {
-            return false;
-        }
-        await fs.remove(lockPath);
+        await fs.rename(lockPath, quarantinePath);
         return true;
     }
     catch (error) {
         if (hasErrorCode(error, 'ENOENT')) {
             return true;
         }
+        if (isLockConflict(error)) {
+            return false;
+        }
+        throw error;
+    }
+}
+async function releaseOwnedLock(lockPath, expectedOwner) {
+    const currentOwner = await readSourceLockOwner(lockPath);
+    if (!currentOwner || currentOwner.token !== expectedOwner.token) {
+        return;
+    }
+    const releasedPath = `${lockPath}.released-${expectedOwner.token}`;
+    try {
+        await fs.rename(lockPath, releasedPath);
+    }
+    catch (error) {
+        if (hasErrorCode(error, 'ENOENT')) {
+            return;
+        }
+        throw error;
+    }
+    await fs.remove(releasedPath);
+}
+async function readSourceLockOwner(lockPath) {
+    try {
+        const data = await fs.readJson(path.join(lockPath, SOURCE_LOCK_OWNER_FILE));
+        if (!isSourceLockOwner(data)) {
+            return null;
+        }
+        return data;
+    }
+    catch (error) {
+        if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
+            return null;
+        }
+        throw error;
+    }
+}
+function isSourceLockOwner(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return false;
     }
+    const owner = value;
+    return (Number.isInteger(owner.pid) &&
+        owner.pid > 0 &&
+        typeof owner.token === 'string' &&
+        owner.token.length > 0);
 }
 function isProcessAlive(pid) {
     try {
@@ -194,6 +251,11 @@ function hasErrorCode(error, code) {
         typeof error === 'object' &&
         'code' in error &&
         error.code === code);
+}
+function isLockConflict(error) {
+    return (hasErrorCode(error, 'EEXIST') ||
+        hasErrorCode(error, 'ENOTEMPTY') ||
+        hasErrorCode(error, 'ENOTDIR'));
 }
 function delay(milliseconds) {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));

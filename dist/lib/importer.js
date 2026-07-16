@@ -116,6 +116,9 @@ function readImportRows(filePath) {
         return [];
     }
     const worksheet = workbook.Sheets[firstSheetName];
+    const firstWorksheetRow = worksheet['!ref']
+        ? XLSX.utils.decode_range(worksheet['!ref']).s.r
+        : 0;
     const rawRows = XLSX.utils.sheet_to_json(worksheet, {
         header: 1,
         defval: '',
@@ -125,7 +128,7 @@ function readImportRows(filePath) {
     const rows = rawRows
         .map((row, index) => ({
         values: [row[0], row[1], row[2]].map(cellToString),
-        rowNumber: index + 1,
+        rowNumber: firstWorksheetRow + index + 1,
     }))
         .filter((row) => row.values.some((value) => value.length > 0));
     const layout = detectColumnLayout(rows[0]?.values || []);

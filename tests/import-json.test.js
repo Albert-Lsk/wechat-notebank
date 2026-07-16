@@ -24,11 +24,21 @@ function runCli(args, homePath, extraEnv = {}) {
   });
 }
 
-function writeWorkbook(filePath, rows) {
+function writeWorkbook(filePath, rows, origin = 'A1') {
   const workbook = XLSX.utils.book_new();
+  const worksheet = {};
+  XLSX.utils.sheet_add_aoa(worksheet, rows, { origin });
+  if (origin !== 'A1') {
+    const start = XLSX.utils.decode_cell(origin);
+    const columnCount = Math.max(...rows.map((row) => row.length));
+    worksheet['!ref'] = XLSX.utils.encode_range(start, {
+      r: start.r + rows.length - 1,
+      c: start.c + columnCount - 1,
+    });
+  }
   XLSX.utils.book_append_sheet(
     workbook,
-    XLSX.utils.aoa_to_sheet(rows),
+    worksheet,
     'Sheet1'
   );
   XLSX.writeFile(workbook, filePath);
@@ -62,7 +72,7 @@ writeWorkbook(workbookPath, [
   [2, savedUrl, ''],
   [3, failedUrl, ''],
   [4, laterUrl, ''],
-]);
+], 'A3');
 
 const result = runCli(['import', workbookPath, '--json'], tempHome, {
   WECHAT_NOTEBANK_TEST_FAIL_URL: failedUrl,
@@ -93,7 +103,7 @@ assert.deepStrictEqual(output, {
     },
     items: [
       {
-        rowNumber: 3,
+        rowNumber: 5,
         sequence: '1',
         sourceUrl: savedUrl,
         status: 'saved',
@@ -101,7 +111,7 @@ assert.deepStrictEqual(output, {
         savedFile: firstSavedFile,
       },
       {
-        rowNumber: 4,
+        rowNumber: 6,
         sequence: '2',
         sourceUrl: savedUrl,
         status: 'skipped',
@@ -110,7 +120,7 @@ assert.deepStrictEqual(output, {
         reason: 'SOURCE_URL_EXISTS',
       },
       {
-        rowNumber: 5,
+        rowNumber: 7,
         sequence: '3',
         sourceUrl: failedUrl,
         status: 'failed',
@@ -121,7 +131,7 @@ assert.deepStrictEqual(output, {
         },
       },
       {
-        rowNumber: 6,
+        rowNumber: 8,
         sequence: '4',
         sourceUrl: laterUrl,
         status: 'saved',

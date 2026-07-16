@@ -2,6 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { createHash } = require('crypto');
 const { spawn } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
@@ -57,6 +58,38 @@ function runCli(args, homePath) {
   assert.strictEqual(outputs[0].result.savedFile, outputs[1].result.savedFile);
   assert.strictEqual(
     fs.readdirSync(archivePath).filter((fileName) => fileName.endsWith('.md')).length,
+    1
+  );
+
+  const staleArchivePath = path.join(tempHome, 'stale-archive');
+  const staleSourceUrl = 'https://mp.weixin.qq.com/s/stale-concurrent';
+  const lockName = createHash('sha256').update(staleSourceUrl).digest('hex');
+  const lockDirectory = path.join(staleArchivePath, '.alskai-notebank-locks');
+  fs.mkdirSync(lockDirectory, { recursive: true });
+  const staleLockPath = path.join(lockDirectory, `${lockName}.lock`);
+  fs.mkdirSync(staleLockPath);
+  fs.writeFileSync(
+    path.join(staleLockPath, 'owner.json'),
+    JSON.stringify({ pid: 999999, token: 'dead-owner' })
+  );
+  const staleArgs = ['fetch', staleSourceUrl, '--output', staleArchivePath, '--json'];
+  const staleResults = await Promise.all(
+    Array.from({ length: 8 }, () => runCli(staleArgs, tempHome))
+  );
+  for (const result of staleResults) {
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  }
+  const staleOutputs = staleResults.map((result) => JSON.parse(result.stdout));
+  assert.strictEqual(
+    staleOutputs.filter((output) => output.status === 'saved').length,
+    1
+  );
+  assert.strictEqual(
+    staleOutputs.filter((output) => output.status === 'skipped').length,
+    7
+  );
+  assert.strictEqual(
+    fs.readdirSync(staleArchivePath).filter((fileName) => fileName.endsWith('.md')).length,
     1
   );
 

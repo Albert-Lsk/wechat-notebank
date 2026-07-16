@@ -1,6 +1,5 @@
 import * as fs from 'fs-extra';
-import { promises as nodeFs } from 'fs';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import * as path from 'path';
 import matter from 'gray-matter';
 import { ArticleMeta } from '../types';
@@ -8,7 +7,12 @@ import { ArticleMeta } from '../types';
 const MAX_FILENAME_BYTES = 240;
 const SOURCE_LOCK_RETRY_MS = 25;
 const SOURCE_LOCK_TIMEOUT_MS = 60_000;
-const ABANDONED_LOCK_AGE_MS = 5 * 60_000;
+const SOURCE_LOCK_OWNER_FILE = 'owner.json';
+
+interface SourceLockOwner {
+  pid: number;
+  token: string;
+}
 
 export const FOLDER_L1 = 'L1_原文';      // 公众号文章原文
 export const FOLDER_L2 = 'L2_原子卡片';  // 文章的原子想法卡片
@@ -120,55 +124,122 @@ export async function withSourceUrlLock<T>(
   const lockPath = path.join(lockDirectory, `${lockName}.lock`);
   await fs.ensureDir(lockDirectory);
 
+  const owner: SourceLockOwner = {
+    pid: process.pid,
+    token: randomUUID(),
+  };
+  const candidatePath = `${lockPath}.candidate-${owner.token}`;
+  try {
+    await fs.ensureDir(candidatePath);
+    await fs.writeJson(path.join(candidatePath, SOURCE_LOCK_OWNER_FILE), owner);
+  } catch (error) {
+    await fs.remove(candidatePath);
+    throw error;
+  }
+
   const startedAt = Date.now();
-  let lockHandle;
-  while (!lockHandle) {
-    try {
-      lockHandle = await nodeFs.open(lockPath, 'wx');
-      await lockHandle.writeFile(String(process.pid), 'utf8');
-    } catch (error) {
-      if (!hasErrorCode(error, 'EEXIST')) {
-        throw error;
+  let acquired = false;
+  try {
+    while (!acquired) {
+      try {
+        await fs.rename(candidatePath, lockPath);
+        acquired = true;
+      } catch (error) {
+        if (!isLockConflict(error)) {
+          throw error;
+        }
+        if (await quarantineAbandonedLock(lockPath)) {
+          continue;
+        }
+        if (Date.now() - startedAt >= SOURCE_LOCK_TIMEOUT_MS) {
+          throw new Error(`等待来源归档锁超时: ${sourceUrl}`);
+        }
+        await delay(SOURCE_LOCK_RETRY_MS);
       }
-      if (await removeAbandonedLock(lockPath)) {
-        continue;
-      }
-      if (Date.now() - startedAt >= SOURCE_LOCK_TIMEOUT_MS) {
-        throw new Error(`等待来源归档锁超时: ${sourceUrl}`);
-      }
-      await delay(SOURCE_LOCK_RETRY_MS);
+    }
+  } finally {
+    if (!acquired) {
+      await fs.remove(candidatePath);
     }
   }
 
   try {
     return await action();
   } finally {
-    await lockHandle.close();
-    await fs.remove(lockPath);
+    await releaseOwnedLock(lockPath, owner);
   }
 }
 
-async function removeAbandonedLock(lockPath: string): Promise<boolean> {
+async function quarantineAbandonedLock(lockPath: string): Promise<boolean> {
+  const owner = await readSourceLockOwner(lockPath);
+  if (!owner || isProcessAlive(owner.pid)) {
+    return false;
+  }
+
+  const quarantinePath = `${lockPath}.stale-${owner.token}`;
   try {
-    const [ownerText, stat] = await Promise.all([
-      nodeFs.readFile(lockPath, 'utf8'),
-      nodeFs.stat(lockPath),
-    ]);
-    const ownerPid = Number(ownerText);
-    const ownerIsGone = Number.isInteger(ownerPid) && ownerPid > 0
-      ? !isProcessAlive(ownerPid)
-      : Date.now() - stat.mtimeMs >= ABANDONED_LOCK_AGE_MS;
-    if (!ownerIsGone) {
-      return false;
-    }
-    await fs.remove(lockPath);
+    await fs.rename(lockPath, quarantinePath);
     return true;
   } catch (error) {
     if (hasErrorCode(error, 'ENOENT')) {
       return true;
     }
+    if (isLockConflict(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function releaseOwnedLock(
+  lockPath: string,
+  expectedOwner: SourceLockOwner
+): Promise<void> {
+  const currentOwner = await readSourceLockOwner(lockPath);
+  if (!currentOwner || currentOwner.token !== expectedOwner.token) {
+    return;
+  }
+
+  const releasedPath = `${lockPath}.released-${expectedOwner.token}`;
+  try {
+    await fs.rename(lockPath, releasedPath);
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return;
+    }
+    throw error;
+  }
+  await fs.remove(releasedPath);
+}
+
+async function readSourceLockOwner(lockPath: string): Promise<SourceLockOwner | null> {
+  try {
+    const data: unknown = await fs.readJson(
+      path.join(lockPath, SOURCE_LOCK_OWNER_FILE)
+    );
+    if (!isSourceLockOwner(data)) {
+      return null;
+    }
+    return data;
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function isSourceLockOwner(value: unknown): value is SourceLockOwner {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return false;
   }
+  const owner = value as Record<string, unknown>;
+  return (
+    Number.isInteger(owner.pid) &&
+    (owner.pid as number) > 0 &&
+    typeof owner.token === 'string' &&
+    owner.token.length > 0
+  );
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -186,6 +257,14 @@ function hasErrorCode(error: unknown, code: string): boolean {
     typeof error === 'object' &&
     'code' in error &&
     (error as NodeJS.ErrnoException).code === code
+  );
+}
+
+function isLockConflict(error: unknown): boolean {
+  return (
+    hasErrorCode(error, 'EEXIST') ||
+    hasErrorCode(error, 'ENOTEMPTY') ||
+    hasErrorCode(error, 'ENOTDIR')
   );
 }
 
