@@ -46,14 +46,18 @@ exports.withSourceUrlLock = withSourceUrlLock;
 exports.getL1Path = getL1Path;
 const fs = __importStar(require("fs-extra"));
 const crypto_1 = require("crypto");
+const child_process_1 = require("child_process");
+const util_1 = require("util");
 const path = __importStar(require("path"));
 const gray_matter_1 = __importDefault(require("gray-matter"));
 const MAX_FILENAME_BYTES = 240;
 const SOURCE_LOCK_RETRY_MS = 25;
 const SOURCE_LOCK_TIMEOUT_MS = 60000;
-const SOURCE_LOCK_HEARTBEAT_MS = 10000;
-const SOURCE_LOCK_STALE_MS = 45000;
+const INVALID_OWNER_STALE_MS = 45000;
 const SOURCE_LOCK_OWNER_FILE = 'owner.json';
+const PROCESS_IDENTITY_CACHE_MS = 1000;
+const execFileAsync = (0, util_1.promisify)(child_process_1.execFile);
+const processIdentityCache = new Map();
 exports.FOLDER_L1 = 'L1_原文'; // 公众号文章原文
 exports.FOLDER_L2 = 'L2_原子卡片'; // 文章的原子想法卡片
 exports.FOLDER_L3 = 'L3_引用素材'; // 可以直接引用的素材
@@ -130,9 +134,14 @@ async function withSourceUrlLock(archivePath, sourceUrl, action) {
     const lockName = (0, crypto_1.createHash)('sha256').update(sourceUrl).digest('hex');
     const lockPath = path.join(lockDirectory, `${lockName}.lock`);
     await fs.ensureDir(lockDirectory);
+    const processStartedAt = await getProcessStartedAt(process.pid);
+    if (!processStartedAt) {
+        throw new Error(`无法读取进程启动身份: ${process.pid}`);
+    }
     const owner = {
         pid: process.pid,
         token: (0, crypto_1.randomUUID)(),
+        processStartedAt,
     };
     const candidatePath = `${lockPath}.candidate-${owner.token}`;
     try {
@@ -170,17 +179,10 @@ async function withSourceUrlLock(archivePath, sourceUrl, action) {
             await fs.remove(candidatePath);
         }
     }
-    const ownerPath = path.join(lockPath, SOURCE_LOCK_OWNER_FILE);
-    const heartbeat = setInterval(() => {
-        const now = new Date();
-        void fs.utimes(ownerPath, now, now).catch(() => { });
-    }, SOURCE_LOCK_HEARTBEAT_MS);
-    heartbeat.unref();
     try {
         return await action();
     }
     finally {
-        clearInterval(heartbeat);
         await releaseOwnedLock(lockPath, owner);
     }
 }
@@ -190,11 +192,13 @@ async function quarantineAbandonedLock(lockPath) {
         return true;
     }
     const { owner, stat } = inspection;
-    const leaseModifiedAt = owner
-        ? (await fs.stat(path.join(lockPath, SOURCE_LOCK_OWNER_FILE))).mtimeMs
-        : stat.mtimeMs;
-    const leaseExpired = Date.now() - leaseModifiedAt >= SOURCE_LOCK_STALE_MS;
-    if (!leaseExpired && (!owner || isProcessAlive(owner.pid))) {
+    if (owner) {
+        const currentProcessStartedAt = await getProcessStartedAt(owner.pid);
+        if (currentProcessStartedAt === owner.processStartedAt) {
+            return false;
+        }
+    }
+    else if (Date.now() - stat.mtimeMs < INVALID_OWNER_STALE_MS) {
         return false;
     }
     const lockIdentity = owner?.token || (0, crypto_1.createHash)('sha256')
@@ -257,6 +261,9 @@ async function readSourceLockOwner(lockPath) {
         if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
             return null;
         }
+        if (error instanceof SyntaxError) {
+            return null;
+        }
         throw error;
     }
 }
@@ -268,16 +275,33 @@ function isSourceLockOwner(value) {
     return (Number.isInteger(owner.pid) &&
         owner.pid > 0 &&
         typeof owner.token === 'string' &&
-        owner.token.length > 0);
+        owner.token.length > 0 &&
+        typeof owner.processStartedAt === 'string' &&
+        owner.processStartedAt.length > 0);
 }
-function isProcessAlive(pid) {
+async function getProcessStartedAt(pid) {
+    const cached = processIdentityCache.get(pid);
+    if (cached && cached.expiresAt > Date.now()) {
+        return cached.identity;
+    }
+    let identity;
     try {
-        process.kill(pid, 0);
-        return true;
+        const { stdout } = await execFileAsync('/bin/ps', [
+            '-p',
+            String(pid),
+            '-o',
+            'lstart=',
+        ]);
+        identity = stdout.trim() || null;
     }
-    catch (error) {
-        return !hasErrorCode(error, 'ESRCH');
+    catch {
+        identity = null;
     }
+    processIdentityCache.set(pid, {
+        identity,
+        expiresAt: Date.now() + PROCESS_IDENTITY_CACHE_MS,
+    });
+    return identity;
 }
 function hasErrorCode(error, code) {
     return Boolean(error &&

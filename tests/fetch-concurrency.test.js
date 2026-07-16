@@ -70,7 +70,11 @@ function runCli(args, homePath) {
   fs.mkdirSync(staleLockPath);
   fs.writeFileSync(
     path.join(staleLockPath, 'owner.json'),
-    JSON.stringify({ pid: 999999, token: 'dead-owner' })
+    JSON.stringify({
+      pid: 999999,
+      token: 'dead-owner',
+      processStartedAt: '旧进程启动身份',
+    })
   );
   const staleArgs = ['fetch', staleSourceUrl, '--output', staleArchivePath, '--json'];
   const staleResults = await Promise.all(
@@ -126,9 +130,12 @@ function runCli(args, homePath) {
   const reusedPidOwnerPath = path.join(reusedPidLockPath, 'owner.json');
   fs.writeFileSync(
     reusedPidOwnerPath,
-    JSON.stringify({ pid: process.pid, token: 'owner-from-old-process' })
+    JSON.stringify({
+      pid: process.pid,
+      token: 'owner-from-old-process',
+      processStartedAt: '旧进程启动身份',
+    })
   );
-  fs.utimesSync(reusedPidOwnerPath, expiredAt, expiredAt);
   const reusedPidResult = await runCli(
     ['fetch', reusedPidUrl, '--output', reusedPidArchivePath, '--json'],
     tempHome
@@ -137,6 +144,27 @@ function runCli(args, homePath) {
     reusedPidResult.status,
     0,
     reusedPidResult.stderr || reusedPidResult.stdout
+  );
+
+  const corruptOwnerArchivePath = path.join(tempHome, 'corrupt-owner-archive');
+  const corruptOwnerUrl = 'https://mp.weixin.qq.com/s/corrupt-owner';
+  const corruptOwnerLockName = createHash('sha256').update(corruptOwnerUrl).digest('hex');
+  const corruptOwnerLockPath = path.join(
+    corruptOwnerArchivePath,
+    '.alskai-notebank-locks',
+    `${corruptOwnerLockName}.lock`
+  );
+  fs.mkdirSync(corruptOwnerLockPath, { recursive: true });
+  fs.writeFileSync(path.join(corruptOwnerLockPath, 'owner.json'), '{broken');
+  fs.utimesSync(corruptOwnerLockPath, expiredAt, expiredAt);
+  const corruptOwnerResult = await runCli(
+    ['fetch', corruptOwnerUrl, '--output', corruptOwnerArchivePath, '--json'],
+    tempHome
+  );
+  assert.strictEqual(
+    corruptOwnerResult.status,
+    0,
+    corruptOwnerResult.stderr || corruptOwnerResult.stdout
   );
 
   console.log('fetch concurrency tests passed');

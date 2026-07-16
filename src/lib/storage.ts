@@ -1,5 +1,7 @@
 import * as fs from 'fs-extra';
 import { createHash, randomUUID } from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import * as path from 'path';
 import matter from 'gray-matter';
 import { ArticleMeta } from '../types';
@@ -7,13 +9,20 @@ import { ArticleMeta } from '../types';
 const MAX_FILENAME_BYTES = 240;
 const SOURCE_LOCK_RETRY_MS = 25;
 const SOURCE_LOCK_TIMEOUT_MS = 60_000;
-const SOURCE_LOCK_HEARTBEAT_MS = 10_000;
-const SOURCE_LOCK_STALE_MS = 45_000;
+const INVALID_OWNER_STALE_MS = 45_000;
 const SOURCE_LOCK_OWNER_FILE = 'owner.json';
+const PROCESS_IDENTITY_CACHE_MS = 1_000;
+const execFileAsync = promisify(execFile);
+
+const processIdentityCache = new Map<number, {
+  identity: string | null;
+  expiresAt: number;
+}>();
 
 interface SourceLockOwner {
   pid: number;
   token: string;
+  processStartedAt: string;
 }
 
 export const FOLDER_L1 = 'L1_原文';      // 公众号文章原文
@@ -126,9 +135,14 @@ export async function withSourceUrlLock<T>(
   const lockPath = path.join(lockDirectory, `${lockName}.lock`);
   await fs.ensureDir(lockDirectory);
 
+  const processStartedAt = await getProcessStartedAt(process.pid);
+  if (!processStartedAt) {
+    throw new Error(`无法读取进程启动身份: ${process.pid}`);
+  }
   const owner: SourceLockOwner = {
     pid: process.pid,
     token: randomUUID(),
+    processStartedAt,
   };
   const candidatePath = `${lockPath}.candidate-${owner.token}`;
   try {
@@ -165,17 +179,9 @@ export async function withSourceUrlLock<T>(
     }
   }
 
-  const ownerPath = path.join(lockPath, SOURCE_LOCK_OWNER_FILE);
-  const heartbeat = setInterval(() => {
-    const now = new Date();
-    void fs.utimes(ownerPath, now, now).catch(() => {});
-  }, SOURCE_LOCK_HEARTBEAT_MS);
-  heartbeat.unref();
-
   try {
     return await action();
   } finally {
-    clearInterval(heartbeat);
     await releaseOwnedLock(lockPath, owner);
   }
 }
@@ -187,11 +193,12 @@ async function quarantineAbandonedLock(lockPath: string): Promise<boolean> {
   }
 
   const { owner, stat } = inspection;
-  const leaseModifiedAt = owner
-    ? (await fs.stat(path.join(lockPath, SOURCE_LOCK_OWNER_FILE))).mtimeMs
-    : stat.mtimeMs;
-  const leaseExpired = Date.now() - leaseModifiedAt >= SOURCE_LOCK_STALE_MS;
-  if (!leaseExpired && (!owner || isProcessAlive(owner.pid))) {
+  if (owner) {
+    const currentProcessStartedAt = await getProcessStartedAt(owner.pid);
+    if (currentProcessStartedAt === owner.processStartedAt) {
+      return false;
+    }
+  } else if (Date.now() - stat.mtimeMs < INVALID_OWNER_STALE_MS) {
     return false;
   }
 
@@ -215,7 +222,10 @@ async function quarantineAbandonedLock(lockPath: string): Promise<boolean> {
 
 async function inspectSourceLock(
   lockPath: string
-): Promise<{ owner: SourceLockOwner | null; stat: fs.Stats } | null> {
+): Promise<{
+  owner: SourceLockOwner | null;
+  stat: fs.Stats;
+} | null> {
   try {
     const stat = await fs.stat(lockPath);
     const owner = await readSourceLockOwner(lockPath);
@@ -262,6 +272,9 @@ async function readSourceLockOwner(lockPath: string): Promise<SourceLockOwner | 
     if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) {
       return null;
     }
+    if (error instanceof SyntaxError) {
+      return null;
+    }
     throw error;
   }
 }
@@ -275,17 +288,36 @@ function isSourceLockOwner(value: unknown): value is SourceLockOwner {
     Number.isInteger(owner.pid) &&
     (owner.pid as number) > 0 &&
     typeof owner.token === 'string' &&
-    owner.token.length > 0
+    owner.token.length > 0 &&
+    typeof owner.processStartedAt === 'string' &&
+    owner.processStartedAt.length > 0
   );
 }
 
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return !hasErrorCode(error, 'ESRCH');
+async function getProcessStartedAt(pid: number): Promise<string | null> {
+  const cached = processIdentityCache.get(pid);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.identity;
   }
+
+  let identity: string | null;
+  try {
+    const { stdout } = await execFileAsync('/bin/ps', [
+      '-p',
+      String(pid),
+      '-o',
+      'lstart=',
+    ]);
+    identity = stdout.trim() || null;
+  } catch {
+    identity = null;
+  }
+
+  processIdentityCache.set(pid, {
+    identity,
+    expiresAt: Date.now() + PROCESS_IDENTITY_CACHE_MS,
+  });
+  return identity;
 }
 
 function hasErrorCode(error: unknown, code: string): boolean {
