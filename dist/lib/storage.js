@@ -42,11 +42,17 @@ exports.generateFilename = generateFilename;
 exports.saveArticle = saveArticle;
 exports.articleExistsBySourceUrl = articleExistsBySourceUrl;
 exports.findArticleBySourceUrl = findArticleBySourceUrl;
+exports.withSourceUrlLock = withSourceUrlLock;
 exports.getL1Path = getL1Path;
 const fs = __importStar(require("fs-extra"));
+const fs_1 = require("fs");
+const crypto_1 = require("crypto");
 const path = __importStar(require("path"));
 const gray_matter_1 = __importDefault(require("gray-matter"));
 const MAX_FILENAME_BYTES = 240;
+const SOURCE_LOCK_RETRY_MS = 25;
+const SOURCE_LOCK_TIMEOUT_MS = 60000;
+const ABANDONED_LOCK_AGE_MS = 5 * 60000;
 exports.FOLDER_L1 = 'L1_原文'; // 公众号文章原文
 exports.FOLDER_L2 = 'L2_原子卡片'; // 文章的原子想法卡片
 exports.FOLDER_L3 = 'L3_引用素材'; // 可以直接引用的素材
@@ -117,6 +123,80 @@ async function findArticleBySourceUrl(archivePath, sourceUrl) {
         }
     }
     return null;
+}
+async function withSourceUrlLock(archivePath, sourceUrl, action) {
+    const lockDirectory = path.join(archivePath, '.alskai-notebank-locks');
+    const lockName = (0, crypto_1.createHash)('sha256').update(sourceUrl).digest('hex');
+    const lockPath = path.join(lockDirectory, `${lockName}.lock`);
+    await fs.ensureDir(lockDirectory);
+    const startedAt = Date.now();
+    let lockHandle;
+    while (!lockHandle) {
+        try {
+            lockHandle = await fs_1.promises.open(lockPath, 'wx');
+            await lockHandle.writeFile(String(process.pid), 'utf8');
+        }
+        catch (error) {
+            if (!hasErrorCode(error, 'EEXIST')) {
+                throw error;
+            }
+            if (await removeAbandonedLock(lockPath)) {
+                continue;
+            }
+            if (Date.now() - startedAt >= SOURCE_LOCK_TIMEOUT_MS) {
+                throw new Error(`等待来源归档锁超时: ${sourceUrl}`);
+            }
+            await delay(SOURCE_LOCK_RETRY_MS);
+        }
+    }
+    try {
+        return await action();
+    }
+    finally {
+        await lockHandle.close();
+        await fs.remove(lockPath);
+    }
+}
+async function removeAbandonedLock(lockPath) {
+    try {
+        const [ownerText, stat] = await Promise.all([
+            fs_1.promises.readFile(lockPath, 'utf8'),
+            fs_1.promises.stat(lockPath),
+        ]);
+        const ownerPid = Number(ownerText);
+        const ownerIsGone = Number.isInteger(ownerPid) && ownerPid > 0
+            ? !isProcessAlive(ownerPid)
+            : Date.now() - stat.mtimeMs >= ABANDONED_LOCK_AGE_MS;
+        if (!ownerIsGone) {
+            return false;
+        }
+        await fs.remove(lockPath);
+        return true;
+    }
+    catch (error) {
+        if (hasErrorCode(error, 'ENOENT')) {
+            return true;
+        }
+        return false;
+    }
+}
+function isProcessAlive(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    }
+    catch (error) {
+        return !hasErrorCode(error, 'ESRCH');
+    }
+}
+function hasErrorCode(error, code) {
+    return Boolean(error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === code);
+}
+function delay(milliseconds) {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 async function getAvailableFilePath(archivePath, filename) {
     const parsed = path.parse(filename);

@@ -1,9 +1,14 @@
 import * as fs from 'fs-extra';
+import { promises as nodeFs } from 'fs';
+import { createHash } from 'crypto';
 import * as path from 'path';
 import matter from 'gray-matter';
 import { ArticleMeta } from '../types';
 
 const MAX_FILENAME_BYTES = 240;
+const SOURCE_LOCK_RETRY_MS = 25;
+const SOURCE_LOCK_TIMEOUT_MS = 60_000;
+const ABANDONED_LOCK_AGE_MS = 5 * 60_000;
 
 export const FOLDER_L1 = 'L1_原文';      // 公众号文章原文
 export const FOLDER_L2 = 'L2_原子卡片';  // 文章的原子想法卡片
@@ -103,6 +108,89 @@ export async function findArticleBySourceUrl(
   }
 
   return null;
+}
+
+export async function withSourceUrlLock<T>(
+  archivePath: string,
+  sourceUrl: string,
+  action: () => Promise<T>
+): Promise<T> {
+  const lockDirectory = path.join(archivePath, '.alskai-notebank-locks');
+  const lockName = createHash('sha256').update(sourceUrl).digest('hex');
+  const lockPath = path.join(lockDirectory, `${lockName}.lock`);
+  await fs.ensureDir(lockDirectory);
+
+  const startedAt = Date.now();
+  let lockHandle;
+  while (!lockHandle) {
+    try {
+      lockHandle = await nodeFs.open(lockPath, 'wx');
+      await lockHandle.writeFile(String(process.pid), 'utf8');
+    } catch (error) {
+      if (!hasErrorCode(error, 'EEXIST')) {
+        throw error;
+      }
+      if (await removeAbandonedLock(lockPath)) {
+        continue;
+      }
+      if (Date.now() - startedAt >= SOURCE_LOCK_TIMEOUT_MS) {
+        throw new Error(`等待来源归档锁超时: ${sourceUrl}`);
+      }
+      await delay(SOURCE_LOCK_RETRY_MS);
+    }
+  }
+
+  try {
+    return await action();
+  } finally {
+    await lockHandle.close();
+    await fs.remove(lockPath);
+  }
+}
+
+async function removeAbandonedLock(lockPath: string): Promise<boolean> {
+  try {
+    const [ownerText, stat] = await Promise.all([
+      nodeFs.readFile(lockPath, 'utf8'),
+      nodeFs.stat(lockPath),
+    ]);
+    const ownerPid = Number(ownerText);
+    const ownerIsGone = Number.isInteger(ownerPid) && ownerPid > 0
+      ? !isProcessAlive(ownerPid)
+      : Date.now() - stat.mtimeMs >= ABANDONED_LOCK_AGE_MS;
+    if (!ownerIsGone) {
+      return false;
+    }
+    await fs.remove(lockPath);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return true;
+    }
+    return false;
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !hasErrorCode(error, 'ESRCH');
+  }
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === code
+  );
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function getAvailableFilePath(archivePath: string, filename: string): Promise<string> {

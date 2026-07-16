@@ -57,6 +57,7 @@ const failedUrl = 'https://mp.weixin.qq.com/s/import-failed';
 const laterUrl = 'https://mp.weixin.qq.com/s/import-later';
 writeWorkbook(workbookPath, [
   ['序号', '链接', '文件地址'],
+  ['', '', ''],
   [1, savedUrl, ''],
   [2, savedUrl, ''],
   [3, failedUrl, ''],
@@ -92,7 +93,7 @@ assert.deepStrictEqual(output, {
     },
     items: [
       {
-        rowNumber: 2,
+        rowNumber: 3,
         sequence: '1',
         sourceUrl: savedUrl,
         status: 'saved',
@@ -100,7 +101,7 @@ assert.deepStrictEqual(output, {
         savedFile: firstSavedFile,
       },
       {
-        rowNumber: 3,
+        rowNumber: 4,
         sequence: '2',
         sourceUrl: savedUrl,
         status: 'skipped',
@@ -109,7 +110,7 @@ assert.deepStrictEqual(output, {
         reason: 'SOURCE_URL_EXISTS',
       },
       {
-        rowNumber: 4,
+        rowNumber: 5,
         sequence: '3',
         sourceUrl: failedUrl,
         status: 'failed',
@@ -120,7 +121,7 @@ assert.deepStrictEqual(output, {
         },
       },
       {
-        rowNumber: 5,
+        rowNumber: 6,
         sequence: '4',
         sourceUrl: laterUrl,
         status: 'saved',

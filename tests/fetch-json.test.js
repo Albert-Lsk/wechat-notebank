@@ -169,6 +169,25 @@ assert.strictEqual(
   false
 );
 
+const corruptArchivePath = path.join(tempHome, 'corrupt-archive');
+fs.mkdirSync(corruptArchivePath, { recursive: true });
+fs.writeFileSync(
+  path.join(corruptArchivePath, 'corrupt.md'),
+  '---\ntags: [\n---\n损坏内容'
+);
+const corruptArchiveResult = runCli([
+  'fetch',
+  'https://mp.weixin.qq.com/s/corrupt-archive',
+  '--output',
+  corruptArchivePath,
+  '--json',
+], tempHome);
+assert.strictEqual(corruptArchiveResult.status, 1);
+assert.strictEqual(
+  JSON.parse(corruptArchiveResult.stdout).error.code,
+  'TRANSACTION_FAILED'
+);
+
 const invalidOptionResult = runCli([
   'fetch',
   '--json',

@@ -54,37 +54,47 @@ async function fetchCommand(url, outputPath, options = {}) {
         throw new command_error_1.CommandError('CONFIG_INVALID', (0, command_error_1.getErrorMessage)(error));
     }
     const log = options.json ? console.error : console.log;
-    const existingFile = await (0, storage_1.findArticleBySourceUrl)(archivePath, url);
-    if (existingFile) {
-        log(`⏭️  已存在，跳过: ${url}`);
-        return {
-            action: 'archive',
-            sourceUrl: url,
-            savedFile: existingFile,
-            archiveRoot: archivePath,
-            processingGoal: config?.processingGoal ?? null,
-            autoProcess: config?.autoProcess ?? false,
-            reason: 'SOURCE_URL_EXISTS',
-        };
+    try {
+        return await (0, storage_1.withSourceUrlLock)(archivePath, url, async () => {
+            const existingFile = await (0, storage_1.findArticleBySourceUrl)(archivePath, url);
+            if (existingFile) {
+                log(`⏭️  已存在，跳过: ${url}`);
+                return {
+                    action: 'archive',
+                    sourceUrl: url,
+                    savedFile: existingFile,
+                    archiveRoot: archivePath,
+                    processingGoal: config?.processingGoal ?? null,
+                    autoProcess: config?.autoProcess ?? false,
+                    reason: 'SOURCE_URL_EXISTS',
+                };
+            }
+            log(`📥 正在获取文章: ${url}`);
+            const { filePath, meta } = await archiveArticle(url, archivePath);
+            if (!options.json) {
+                console.log(`\n✅ 文章已保存！`);
+                console.log(`📄 文件: ${filePath}`);
+                console.log(`📌 标题: ${meta.title}`);
+                console.log(`👤 作者: ${meta.author}`);
+                console.log(`📅 发布: ${meta.pubDate}`);
+                console.log(`🏷️  来源: ${meta.wechatName}`);
+            }
+            return {
+                action: 'archive',
+                sourceUrl: url,
+                savedFile: filePath,
+                archiveRoot: archivePath,
+                processingGoal: config?.processingGoal ?? null,
+                autoProcess: config?.autoProcess ?? false,
+            };
+        });
     }
-    log(`📥 正在获取文章: ${url}`);
-    const { filePath, meta } = await archiveArticle(url, archivePath);
-    if (!options.json) {
-        console.log(`\n✅ 文章已保存！`);
-        console.log(`📄 文件: ${filePath}`);
-        console.log(`📌 标题: ${meta.title}`);
-        console.log(`👤 作者: ${meta.author}`);
-        console.log(`📅 发布: ${meta.pubDate}`);
-        console.log(`🏷️  来源: ${meta.wechatName}`);
+    catch (error) {
+        if (error instanceof command_error_1.CommandError) {
+            throw error;
+        }
+        throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
     }
-    return {
-        action: 'archive',
-        sourceUrl: url,
-        savedFile: filePath,
-        archiveRoot: archivePath,
-        processingGoal: config?.processingGoal ?? null,
-        autoProcess: config?.autoProcess ?? false,
-    };
 }
 async function archiveArticle(url, archivePath) {
     // 获取 HTML

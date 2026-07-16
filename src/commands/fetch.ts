@@ -1,5 +1,5 @@
 import { fetchArticleHtml, parseWechatArticle, buildMeta } from '../lib/parser';
-import { findArticleBySourceUrl, saveArticle } from '../lib/storage';
+import { findArticleBySourceUrl, saveArticle, withSourceUrlLock } from '../lib/storage';
 import { readConfig } from '../lib/config';
 import { ArticleMeta, ParseResult, WechatNotebankConfig } from '../types';
 import { CommandError, getErrorMessage } from '../lib/command-error';
@@ -41,41 +41,50 @@ export async function fetchCommand(
   }
   const log = options.json ? console.error : console.log;
 
-  const existingFile = await findArticleBySourceUrl(archivePath, url);
-  if (existingFile) {
-    log(`⏭️  已存在，跳过: ${url}`);
-    return {
-      action: 'archive',
-      sourceUrl: url,
-      savedFile: existingFile,
-      archiveRoot: archivePath,
-      processingGoal: config?.processingGoal ?? null,
-      autoProcess: config?.autoProcess ?? false,
-      reason: 'SOURCE_URL_EXISTS',
-    };
+  try {
+    return await withSourceUrlLock(archivePath, url, async () => {
+      const existingFile = await findArticleBySourceUrl(archivePath, url);
+      if (existingFile) {
+        log(`⏭️  已存在，跳过: ${url}`);
+        return {
+          action: 'archive',
+          sourceUrl: url,
+          savedFile: existingFile,
+          archiveRoot: archivePath,
+          processingGoal: config?.processingGoal ?? null,
+          autoProcess: config?.autoProcess ?? false,
+          reason: 'SOURCE_URL_EXISTS',
+        };
+      }
+
+      log(`📥 正在获取文章: ${url}`);
+
+      const { filePath, meta } = await archiveArticle(url, archivePath);
+
+      if (!options.json) {
+        console.log(`\n✅ 文章已保存！`);
+        console.log(`📄 文件: ${filePath}`);
+        console.log(`📌 标题: ${meta.title}`);
+        console.log(`👤 作者: ${meta.author}`);
+        console.log(`📅 发布: ${meta.pubDate}`);
+        console.log(`🏷️  来源: ${meta.wechatName}`);
+      }
+
+      return {
+        action: 'archive',
+        sourceUrl: url,
+        savedFile: filePath,
+        archiveRoot: archivePath,
+        processingGoal: config?.processingGoal ?? null,
+        autoProcess: config?.autoProcess ?? false,
+      };
+    });
+  } catch (error) {
+    if (error instanceof CommandError) {
+      throw error;
+    }
+    throw new CommandError('TRANSACTION_FAILED', getErrorMessage(error));
   }
-
-  log(`📥 正在获取文章: ${url}`);
-
-  const { filePath, meta } = await archiveArticle(url, archivePath);
-
-  if (!options.json) {
-    console.log(`\n✅ 文章已保存！`);
-    console.log(`📄 文件: ${filePath}`);
-    console.log(`📌 标题: ${meta.title}`);
-    console.log(`👤 作者: ${meta.author}`);
-    console.log(`📅 发布: ${meta.pubDate}`);
-    console.log(`🏷️  来源: ${meta.wechatName}`);
-  }
-
-  return {
-    action: 'archive',
-    sourceUrl: url,
-    savedFile: filePath,
-    archiveRoot: archivePath,
-    processingGoal: config?.processingGoal ?? null,
-    autoProcess: config?.autoProcess ?? false,
-  };
 }
 
 export async function archiveArticle(

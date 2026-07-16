@@ -68,24 +68,26 @@ async function importCommand(filePath, options = {}) {
                 };
             }
             try {
-                const existingFile = await (0, storage_1.findArticleBySourceUrl)(archivePath, row.url);
-                if (existingFile) {
-                    log(`⏭️  [第 ${row.rowNumber} 行] 已存在，跳过: ${row.url}`);
+                return await (0, storage_1.withSourceUrlLock)(archivePath, row.url, async () => {
+                    const existingFile = await (0, storage_1.findArticleBySourceUrl)(archivePath, row.url);
+                    if (existingFile) {
+                        log(`⏭️  [第 ${row.rowNumber} 行] 已存在，跳过: ${row.url}`);
+                        return {
+                            status: 'skipped',
+                            archiveRoot: archivePath,
+                            savedFile: existingFile,
+                            reason: 'SOURCE_URL_EXISTS',
+                        };
+                    }
+                    log(`📥 [第 ${row.rowNumber} 行] 正在获取文章: ${row.url}`);
+                    const result = await (0, fetch_1.archiveArticle)(row.url, archivePath);
+                    log(`✅ [第 ${row.rowNumber} 行] 已保存: ${result.filePath}`);
                     return {
-                        status: 'skipped',
+                        status: 'archived',
                         archiveRoot: archivePath,
-                        savedFile: existingFile,
-                        reason: 'SOURCE_URL_EXISTS',
+                        savedFile: result.filePath,
                     };
-                }
-                log(`📥 [第 ${row.rowNumber} 行] 正在获取文章: ${row.url}`);
-                const result = await (0, fetch_1.archiveArticle)(row.url, archivePath);
-                log(`✅ [第 ${row.rowNumber} 行] 已保存: ${result.filePath}`);
-                return {
-                    status: 'archived',
-                    archiveRoot: archivePath,
-                    savedFile: result.filePath,
-                };
+                });
             }
             catch (error) {
                 const commandError = error instanceof command_error_1.CommandError

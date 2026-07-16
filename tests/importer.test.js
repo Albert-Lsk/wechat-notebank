@@ -324,6 +324,7 @@ const { importWorkbook } = require('../dist/lib/importer');
     exports: {
       findArticleBySourceUrl: async (outputPath, url) =>
         url.endsWith('/existing') ? path.join(outputPath, 'article.md') : null,
+      withSourceUrlLock: async (_outputPath, _url, action) => action(),
     },
   };
 

@@ -19,6 +19,10 @@ Module._load = function loadWithMockedPuppeteer(request, parent, isMain) {
             setExtraHTTPHeaders: async () => {},
             goto: async (url) => {
               currentUrl = url;
+              const delayMs = Number(process.env.WECHAT_NOTEBANK_TEST_GOTO_DELAY_MS || 0);
+              if (delayMs > 0) {
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+              }
               if (url === process.env.WECHAT_NOTEBANK_TEST_FAIL_URL) {
                 throw new Error(`测试无法获取文章: ${url}`);
               }

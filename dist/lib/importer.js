@@ -120,12 +120,14 @@ function readImportRows(filePath) {
         header: 1,
         defval: '',
         raw: false,
-        blankrows: false,
+        blankrows: true,
     });
-    const rows = rawRows.map((row, index) => ({
+    const rows = rawRows
+        .map((row, index) => ({
         values: [row[0], row[1], row[2]].map(cellToString),
         rowNumber: index + 1,
-    }));
+    }))
+        .filter((row) => row.values.some((value) => value.length > 0));
     const layout = detectColumnLayout(rows[0]?.values || []);
     const dataRows = rows[0] && isHeaderRow(rows[0].values)
         ? rows.slice(1)
