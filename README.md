@@ -85,10 +85,28 @@ export WECHAT_NOTEBANK_CHROME_PATH="/Applications/Google Chrome.app/Contents/Mac
 
 ## 安装或更新
 
-目前推荐直接从 GitHub 安装最新版本：
+首版 Agent 自助安装支持 macOS Apple Silicon。运行依赖 Node.js 20+、npm 和 Google Chrome；工具会诊断这些依赖，但不会替你安装它们。
+
+安装固定的 GitHub Release 标签，避免使用持续变化的开发分支：
 
 ```bash
-npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/heads/main.tar.gz --force
+npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/tags/v0.2.0.tar.gz --force
+```
+
+安装或更新 Agent 集成时，必须明确目标。可以先预演，再正式执行：
+
+```bash
+alskai-notebank setup --agents codex,claude --dry-run --json
+alskai-notebank setup --agents codex,claude --json
+alskai-notebank doctor --json
+```
+
+只使用 Codex 时传 `codex`，只使用 Claude Code 时传 `claude`。`setup` 会安装当前包附带的 Skill；Claude Code 还会安装 `/alskai-notebank` 命令。已有文件更新前会备份，失败时会恢复，重复执行不会重复改写相同版本。成功后请重启 Codex 或 Claude Code，让当前会话重新发现 Skill。
+
+你也可以把下面这段原样发给具备终端权限的 Agent：
+
+```text
+请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.2.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
 ```
 
 安装后推荐使用 `alskai-notebank` 命令。`wechat-notebank` 是兼容旧用法的命令别名，两者调用的是同一个工具。
@@ -158,6 +176,8 @@ $HOME\WeChatArticles
 | `alskai-notebank init` | 使用原有引导初始化项目知识库 |
 | `alskai-notebank init --scope global --archive-path <folder>` | 设置用户全局默认配置 |
 | `alskai-notebank init --scope project --archive-path <folder>` | 设置当前项目覆盖配置 |
+| `alskai-notebank setup --agents <targets> [--dry-run] --json` | 安装或更新指定 Agent 集成 |
+| `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill 与配置 |
 | `alskai-notebank <url>` | 保存单篇文章到默认路径 |
 | `alskai-notebank fetch <url>` | 保存单篇文章，和上面等价 |
 | `alskai-notebank <url> --output <folder>` | 保存到指定目录 |
@@ -316,10 +336,10 @@ wechat-notebank fetch <url>
 
 这通常表示旧版本在等待微信页面所有网络请求结束。微信文章里的图片、统计脚本或风控页面可能让页面一直不进入“网络空闲”状态。
 
-先更新到最新版：
+先更新到固定版本：
 
 ```bash
-npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/heads/main.tar.gz --force
+npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/tags/v0.2.0.tar.gz --force
 ```
 
 然后重试：
@@ -376,7 +396,7 @@ alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%
 当前包还没有发布到 npm registry。请使用 GitHub 安装：
 
 ```bash
-npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/heads/main.tar.gz --force
+npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/tags/v0.2.0.tar.gz --force
 ```
 
 ### Windows 里 `~/WeChatArticles` 能用吗？
@@ -395,31 +415,16 @@ $HOME\WeChatArticles
 
 ## Claude Code / Codex Skill
 
-如果你使用 Claude Code 或 Codex，可以安装配套 skill，让 Agent 帮你调用本地 CLI。
-
-先安装 CLI，再安装 skill。
-
-在项目仓库里：
+如果你使用 Claude Code 或 Codex，安装 CLI 后用同一个入口安装配套 Skill。首版 `setup` 和 `doctor` 只支持 macOS Apple Silicon。
 
 ```bash
-bash scripts/install-skills.sh
+alskai-notebank setup --agents codex --json
+alskai-notebank setup --agents claude --json
+alskai-notebank setup --agents codex,claude --json
+alskai-notebank doctor --json
 ```
 
-如果是通过全局 npm 包安装：
-
-```bash
-npm explore -g wechat-notebank -- bash scripts/install-skills.sh
-```
-
-确认安装：
-
-```bash
-ls ~/.claude/skills/alskai-notebank
-ls ~/.codex/skills/alskai-notebank
-ls ~/.claude/commands/alskai-notebank.md
-```
-
-安装后重启 Claude Code 或 Codex。
+安装后重启 Codex 或 Claude Code。
 
 Claude Code 示例：
 

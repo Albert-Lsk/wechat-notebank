@@ -7,6 +7,7 @@ const { spawnSync } = require('child_process');
 const projectRoot = path.resolve(__dirname, '..');
 const skillRoot = path.join(projectRoot, 'skills', 'alskai-notebank');
 const entryPath = path.join(skillRoot, 'SKILL.md');
+const setupReferencePath = path.join(skillRoot, 'references', 'setup.md');
 const archiveReferencePath = path.join(skillRoot, 'references', 'archive.md');
 const openAiMetadataPath = path.join(skillRoot, 'agents', 'openai.yaml');
 const claudeCommandPath = path.join(
@@ -23,10 +24,21 @@ const publicSkillEntries = fs.readdirSync(path.join(projectRoot, 'skills'))
   ));
 assert.deepStrictEqual(publicSkillEntries, ['alskai-notebank']);
 assert.match(entry, /^---\nname: alskai-notebank\n/m);
+assert.match(entry, /references\/setup\.md/);
 assert.match(entry, /references\/archive\.md/);
+assert.match(entry, /(install|update|diagnos|安装|更新|诊断)/i);
 assert.match(entry, /Agent[^\n]*(interface|操作界面)/i);
 assert.match(entry, /CLI[^\n]*(deterministic|确定性)/i);
-assert.doesNotMatch(entry, /alskai-notebank (fetch|import)/);
+assert.doesNotMatch(entry, /alskai-notebank (setup|doctor|fetch|import)/);
+
+assert.ok(fs.existsSync(setupReferencePath));
+const setupReference = fs.readFileSync(setupReferencePath, 'utf8');
+assert.match(setupReference, /alskai-notebank doctor --json/);
+assert.match(setupReference, /alskai-notebank setup --agents <codex\|claude\|codex,claude>/);
+assert.match(setupReference, /--dry-run/);
+assert.match(setupReference, /v0\.2\.0/);
+assert.match(setupReference, /restart|重启/i);
+assert.doesNotMatch(setupReference, /refs\/heads\/main|\bsudo\b/i);
 
 assert.ok(fs.existsSync(archiveReferencePath));
 const archiveReference = fs.readFileSync(archiveReferencePath, 'utf8');
@@ -67,8 +79,11 @@ const installResult = spawnSync('bash', ['scripts/install-skills.sh'], {
 });
 assert.strictEqual(installResult.status, 0, installResult.stderr || installResult.stdout);
 for (const target of [
+  path.join(tempHome, '.claude', 'skills', 'alskai-notebank', 'references', 'setup.md'),
   path.join(tempHome, '.claude', 'skills', 'alskai-notebank', 'references', 'archive.md'),
+  path.join(tempHome, '.codex', 'skills', 'alskai-notebank', 'references', 'setup.md'),
   path.join(tempHome, '.codex', 'skills', 'alskai-notebank', 'references', 'archive.md'),
+  path.join(tempHome, '.agents', 'skills', 'alskai-notebank', 'references', 'setup.md'),
   path.join(tempHome, '.agents', 'skills', 'alskai-notebank', 'references', 'archive.md'),
 ]) {
   assert.ok(fs.existsSync(target), `installed skill should include ${target}`);

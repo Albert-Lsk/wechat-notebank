@@ -11,6 +11,18 @@ export interface ImportArgs {
   json: boolean;
 }
 
+export type SetupAgent = 'codex' | 'claude';
+
+export interface SetupArgs {
+  agents: SetupAgent[];
+  dryRun: boolean;
+  json: boolean;
+}
+
+export interface DoctorArgs {
+  json: boolean;
+}
+
 export interface LegacyInitArgs {
   kind: 'legacy';
   json: false;
@@ -86,6 +98,52 @@ export function parseFetchArgs(args: string[]): FetchArgs {
   }
 
   return { url, outputPath, json };
+}
+
+export function parseSetupArgs(args: string[]): SetupArgs {
+  let agents: SetupAgent[] | undefined;
+  let dryRun = false;
+  let json = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const option = args[i];
+    if (isJsonOutputOption(option)) {
+      json = true;
+      continue;
+    }
+    if (option === '--dry-run') {
+      dryRun = true;
+      continue;
+    }
+    if (option === '--agents') {
+      const value = args[i + 1];
+      if (!value || value.startsWith('-')) {
+        throw new Error('--agents requires codex, claude, or codex,claude');
+      }
+      agents = parseSetupAgents(value);
+      i++;
+      continue;
+    }
+    throw new Error(`Unknown setup option: ${option}`);
+  }
+
+  if (!agents) {
+    throw new Error('请提供 --agents <codex|claude|codex,claude>');
+  }
+
+  return { agents, dryRun, json };
+}
+
+export function parseDoctorArgs(args: string[]): DoctorArgs {
+  let json = false;
+  for (const option of args) {
+    if (isJsonOutputOption(option)) {
+      json = true;
+      continue;
+    }
+    throw new Error(`Unknown doctor option: ${option}`);
+  }
+  return { json };
 }
 
 export function parseInitArgs(args: string[]): InitArgs {
@@ -178,6 +236,17 @@ export function isJsonOutputRequested(args: string[]): boolean {
 
 function isJsonOutputOption(value: string): boolean {
   return value === JSON_OPTION;
+}
+
+function parseSetupAgents(value: string): SetupAgent[] {
+  const agents = [...new Set(value.split(',').map((agent) => agent.trim()))];
+  if (
+    agents.length === 0 ||
+    agents.some((agent) => agent !== 'codex' && agent !== 'claude')
+  ) {
+    throw new Error('--agents requires codex, claude, or codex,claude');
+  }
+  return agents as SetupAgent[];
 }
 
 export function parseImportArgs(args: string[]): ImportArgs {

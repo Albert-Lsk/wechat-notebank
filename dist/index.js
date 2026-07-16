@@ -4,6 +4,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const init_1 = require("./commands/init");
 const fetch_1 = require("./commands/fetch");
 const import_1 = require("./commands/import");
+const setup_1 = require("./commands/setup");
+const doctor_1 = require("./commands/doctor");
 const config_1 = require("./lib/config");
 const cli_1 = require("./lib/cli");
 const command_output_1 = require("./lib/command-output");
@@ -20,6 +22,9 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank init                    初始化知识库
   alskai-notebank init --scope <global|project> --archive-path <folder> [options]
                                           配置全局默认或项目覆盖
+  alskai-notebank setup --agents <codex|claude|codex,claude> [--dry-run] [--json]
+                                          安装或更新 Agent 集成（macOS Apple Silicon）
+  alskai-notebank doctor [--json]          只读诊断环境、CLI、Skill 与配置
   alskai-notebank <url> [--output <folder>] [--json]
                                           存档文章
   alskai-notebank import <Excel文件地址> [--json]
@@ -34,6 +39,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
 示例:
   alskai-notebank https://mp.weixin.qq.com/s/xxx -o ~/WeChatArticles
+  alskai-notebank setup --agents codex --dry-run --json
+  alskai-notebank doctor --json
   alskai-notebank import ./articles.xlsx
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
 
@@ -81,6 +88,89 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 : new command_error_1.CommandError('CONFIG_INVALID', (0, command_error_1.getErrorMessage)(error));
             if (initArgs.json) {
                 writeCommandJsonFailure('init', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
+            process.exitCode = 1;
+        }
+        return;
+    }
+    if (command === 'setup') {
+        const jsonRequested = (0, cli_1.isJsonOutputRequested)(args);
+        try {
+            const setupArgs = (0, cli_1.parseSetupArgs)(args);
+            const result = await (0, setup_1.setupCommand)(setupArgs);
+            if (setupArgs.json) {
+                const unchanged = result.actions.every((action) => action.status === 'unchanged');
+                (0, command_output_1.writeJsonOutput)({
+                    ok: true,
+                    command: 'setup',
+                    status: unchanged ? 'unchanged' : setupArgs.dryRun ? 'planned' : 'installed',
+                    result,
+                });
+            }
+            else {
+                for (const action of result.actions) {
+                    const label = action.status === 'planned'
+                        ? '预演'
+                        : action.status === 'unchanged'
+                            ? '无需更新'
+                            : action.status === 'updated'
+                                ? '已更新'
+                                : '已安装';
+                    console.log(`${label}: ${action.agent} -> ${action.target}`);
+                }
+                if (result.restartRequired) {
+                    const agentNames = result.agents.map((agent) => agent === 'codex' ? 'Codex' : 'Claude Code');
+                    console.log(`请重启 ${agentNames.join(' 和 ')} 以重新发现 Skill。`);
+                }
+            }
+        }
+        catch (error) {
+            const commandError = error instanceof command_error_1.CommandError
+                ? error
+                : new command_error_1.CommandError('CLI_USAGE_ERROR', (0, command_error_1.getErrorMessage)(error));
+            if (jsonRequested) {
+                writeCommandJsonFailure('setup', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
+            process.exitCode = 1;
+        }
+        return;
+    }
+    if (command === 'doctor') {
+        const jsonRequested = (0, cli_1.isJsonOutputRequested)(args);
+        try {
+            const doctorArgs = (0, cli_1.parseDoctorArgs)(args);
+            const result = await (0, doctor_1.doctorCommand)();
+            if (doctorArgs.json) {
+                (0, command_output_1.writeJsonOutput)({
+                    ok: result.status !== 'failed',
+                    command: 'doctor',
+                    status: result.status,
+                    result: {
+                        version: result.version,
+                        checks: result.checks,
+                    },
+                    ...(result.error ? { error: result.error } : {}),
+                });
+            }
+            else {
+                for (const check of result.checks) {
+                    console.log(`${check.status}: ${check.id} - ${check.message}`);
+                }
+            }
+            if (result.status === 'failed') {
+                process.exitCode = 1;
+            }
+        }
+        catch (error) {
+            const commandError = error instanceof command_error_1.CommandError
+                ? error
+                : new command_error_1.CommandError('CLI_USAGE_ERROR', (0, command_error_1.getErrorMessage)(error));
+            if (jsonRequested) {
+                writeCommandJsonFailure('doctor', commandError);
                 return;
             }
             console.error(`❌ ${commandError.message}`);
