@@ -41,13 +41,7 @@ const storage_1 = require("../lib/storage");
 const config_1 = require("../lib/config");
 const command_error_1 = require("../lib/command-error");
 async function initCommand(args) {
-    if (args?.hasOptions) {
-        if (!args.scope) {
-            throw new Error('请提供 --scope <global|project>');
-        }
-        if (!args.archivePath) {
-            throw new Error('请提供 --archive-path <path>');
-        }
+    if (args?.kind === 'scoped') {
         return initializeScopedConfig(args);
     }
     console.log('🤖 首次使用！请完成初始化...\n');
@@ -99,22 +93,27 @@ async function initCommand(args) {
     console.log('\n开始使用：wechat-notebank fetch <文章链接>');
 }
 async function initializeScopedConfig(args) {
-    const scope = args.scope;
-    const archivePath = args.archivePath;
+    const { scope, archivePath } = args;
     const resolvedArchivePath = path.resolve(archivePath.replace(/^~/, process.env.HOME || ''));
     let existingConfig;
+    let globalConfig = null;
     try {
         existingConfig = await (0, config_1.readScopedConfig)(scope);
+        if (scope === 'project') {
+            globalConfig = await (0, config_1.readScopedConfig)('global');
+        }
     }
     catch (error) {
         throw new command_error_1.CommandError('CONFIG_INVALID', (0, command_error_1.getErrorMessage)(error));
     }
     const config = {
         ...existingConfig,
-        name: existingConfig?.name ?? 'MyNotes',
         archivePath: resolvedArchivePath,
-        createdAt: existingConfig?.createdAt ?? new Date().toISOString(),
     };
+    if (scope === 'global') {
+        config.name = existingConfig?.name ?? 'MyNotes';
+        config.createdAt = existingConfig?.createdAt ?? new Date().toISOString();
+    }
     if (args.processingGoalProvided) {
         config.processingGoal = (args.processingGoal ?? '').trim();
     }
@@ -124,19 +123,37 @@ async function initializeScopedConfig(args) {
     else if (scope === 'global' && config.autoProcess === undefined) {
         config.autoProcess = false;
     }
+    let configWritten = false;
     try {
-        await fs.ensureDir(resolvedArchivePath);
         await (0, config_1.writeConfig)(config, scope);
+        configWritten = true;
+        await fs.ensureDir(resolvedArchivePath);
     }
     catch (error) {
+        if (configWritten) {
+            try {
+                if (existingConfig) {
+                    await (0, config_1.writeConfig)(existingConfig, scope);
+                }
+                else {
+                    await fs.remove((0, config_1.getConfigPath)(scope));
+                }
+            }
+            catch (rollbackError) {
+                throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(rollbackError));
+            }
+        }
         throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
     }
+    const effectiveConfig = scope === 'project'
+        ? (0, config_1.resolveConfigLayers)(globalConfig, config)
+        : (0, config_1.resolveConfigLayers)(config, null);
     return {
         scope,
         configFile: (0, config_1.getConfigPath)(scope),
         archivePath: resolvedArchivePath,
-        processingGoal: config.processingGoal?.trim() || null,
-        autoProcess: config.autoProcess ?? false,
+        processingGoal: effectiveConfig.processingGoal ?? null,
+        autoProcess: effectiveConfig.autoProcess ?? false,
     };
 }
 function printSuccess(basePath) {

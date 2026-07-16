@@ -8,6 +8,10 @@ const projectRoot = path.resolve(__dirname, '..');
 const cliPath = path.join(projectRoot, 'dist', 'index.js');
 const mockPuppeteerPath = path.join(__dirname, 'helpers', 'mock-puppeteer.js');
 const articleFixturePath = path.join(__dirname, 'fixtures', 'wechat-article.html');
+const articleEnv = {
+  NODE_OPTIONS: `--require=${mockPuppeteerPath}`,
+  WECHAT_NOTEBANK_TEST_HTML_FILE: articleFixturePath,
+};
 
 function runCli(args, homePath, cwdPath, extraEnv = {}) {
   return spawnSync(process.execPath, [cliPath, ...args], {
@@ -21,12 +25,21 @@ function runCli(args, homePath, cwdPath, extraEnv = {}) {
   });
 }
 
-const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-init-'));
-const homePath = path.join(tempRoot, 'home');
-const projectPath = path.join(tempRoot, 'project');
+function createSandbox(name) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `wechat-notebank-${name}-`));
+  const home = path.join(root, 'home');
+  const project = path.join(root, 'project');
+  fs.mkdirSync(home, { recursive: true });
+  fs.mkdirSync(project, { recursive: true });
+  return { root, home, project };
+}
+
+function parseJsonOutput(result) {
+  return JSON.parse(result.stdout);
+}
+
+const { root: tempRoot, home: homePath, project: projectPath } = createSandbox('init');
 const globalArchivePath = path.join(tempRoot, 'global-archive');
-fs.mkdirSync(homePath, { recursive: true });
-fs.mkdirSync(projectPath, { recursive: true });
 
 const globalResult = runCli([
   'init',
@@ -38,7 +51,7 @@ const globalResult = runCli([
 ], homePath, projectPath);
 
 assert.strictEqual(globalResult.status, 0, globalResult.stderr || globalResult.stdout);
-const globalOutput = JSON.parse(globalResult.stdout);
+const globalOutput = parseJsonOutput(globalResult);
 const globalConfigPath = path.join(homePath, '.config', 'alskai-notebank', 'config.json');
 assert.deepStrictEqual(globalOutput, {
   ok: true,
@@ -62,13 +75,13 @@ assert.strictEqual(globalConfig.autoProcess, false);
 assert.strictEqual(typeof globalConfig.createdAt, 'string');
 assert.strictEqual(Object.hasOwn(globalConfig, 'processingGoal'), false);
 
-const inheritanceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-inherit-'));
-const inheritanceHome = path.join(inheritanceRoot, 'home');
-const inheritanceProject = path.join(inheritanceRoot, 'project');
+const {
+  root: inheritanceRoot,
+  home: inheritanceHome,
+  project: inheritanceProject,
+} = createSandbox('inherit');
 const inheritedGlobalArchive = path.join(inheritanceRoot, 'global-archive');
 const inheritedProjectArchive = path.join(inheritanceRoot, 'project-archive');
-fs.mkdirSync(inheritanceHome, { recursive: true });
-fs.mkdirSync(inheritanceProject, { recursive: true });
 
 const globalWithGoalResult = runCli([
   'init',
@@ -100,10 +113,18 @@ assert.strictEqual(
   0,
   projectOnlyArchiveResult.stderr || projectOnlyArchiveResult.stdout
 );
+const projectOnlyArchiveOutput = parseJsonOutput(projectOnlyArchiveResult);
+assert.strictEqual(
+  projectOnlyArchiveOutput.result.processingGoal,
+  '提炼适合所有知识工作者复用的观点'
+);
+assert.strictEqual(projectOnlyArchiveOutput.result.autoProcess, true);
 
 const projectConfigPath = path.join(inheritanceProject, '.wechat-notebank.json');
 const projectConfig = JSON.parse(fs.readFileSync(projectConfigPath, 'utf8'));
 assert.strictEqual(projectConfig.archivePath, inheritedProjectArchive);
+assert.strictEqual(Object.hasOwn(projectConfig, 'name'), false);
+assert.strictEqual(Object.hasOwn(projectConfig, 'createdAt'), false);
 assert.strictEqual(Object.hasOwn(projectConfig, 'processingGoal'), false);
 assert.strictEqual(Object.hasOwn(projectConfig, 'autoProcess'), false);
 
@@ -111,16 +132,13 @@ const inheritedFetchResult = runCli([
   'fetch',
   'https://mp.weixin.qq.com/s/inherited-config',
   '--json',
-], inheritanceHome, inheritanceProject, {
-  NODE_OPTIONS: `--require=${mockPuppeteerPath}`,
-  WECHAT_NOTEBANK_TEST_HTML_FILE: articleFixturePath,
-});
+], inheritanceHome, inheritanceProject, articleEnv);
 assert.strictEqual(
   inheritedFetchResult.status,
   0,
   inheritedFetchResult.stderr || inheritedFetchResult.stdout
 );
-const inheritedFetchOutput = JSON.parse(inheritedFetchResult.stdout);
+const inheritedFetchOutput = parseJsonOutput(inheritedFetchResult);
 assert.strictEqual(inheritedFetchOutput.result.archiveRoot, inheritedProjectArchive);
 assert.strictEqual(
   inheritedFetchOutput.result.processingGoal,
@@ -144,7 +162,7 @@ assert.strictEqual(
   0,
   projectOverrideResult.stderr || projectOverrideResult.stdout
 );
-const projectOverrideOutput = JSON.parse(projectOverrideResult.stdout);
+const projectOverrideOutput = parseJsonOutput(projectOverrideResult);
 assert.strictEqual(projectOverrideOutput.result.processingGoal, '提炼项目专用案例');
 assert.strictEqual(projectOverrideOutput.result.autoProcess, false);
 
@@ -152,16 +170,13 @@ const overriddenFetchResult = runCli([
   'fetch',
   'https://mp.weixin.qq.com/s/project-overrides',
   '--json',
-], inheritanceHome, inheritanceProject, {
-  NODE_OPTIONS: `--require=${mockPuppeteerPath}`,
-  WECHAT_NOTEBANK_TEST_HTML_FILE: articleFixturePath,
-});
+], inheritanceHome, inheritanceProject, articleEnv);
 assert.strictEqual(
   overriddenFetchResult.status,
   0,
   overriddenFetchResult.stderr || overriddenFetchResult.stdout
 );
-const overriddenFetchOutput = JSON.parse(overriddenFetchResult.stdout);
+const overriddenFetchOutput = parseJsonOutput(overriddenFetchResult);
 assert.strictEqual(overriddenFetchOutput.result.archiveRoot, inheritedProjectArchive);
 assert.strictEqual(overriddenFetchOutput.result.processingGoal, '提炼项目专用案例');
 assert.strictEqual(overriddenFetchOutput.result.autoProcess, false);
@@ -173,16 +188,13 @@ const requestOverrideResult = runCli([
   '--output',
   requestArchivePath,
   '--json',
-], inheritanceHome, inheritanceProject, {
-  NODE_OPTIONS: `--require=${mockPuppeteerPath}`,
-  WECHAT_NOTEBANK_TEST_HTML_FILE: articleFixturePath,
-});
+], inheritanceHome, inheritanceProject, articleEnv);
 assert.strictEqual(
   requestOverrideResult.status,
   0,
   requestOverrideResult.stderr || requestOverrideResult.stdout
 );
-const requestOverrideOutput = JSON.parse(requestOverrideResult.stdout);
+const requestOverrideOutput = parseJsonOutput(requestOverrideResult);
 assert.strictEqual(requestOverrideOutput.result.archiveRoot, requestArchivePath);
 assert.strictEqual(requestOverrideOutput.result.processingGoal, '提炼项目专用案例');
 assert.strictEqual(requestOverrideOutput.result.autoProcess, false);
@@ -229,31 +241,28 @@ assert.strictEqual(
   0,
   clearProjectGoalResult.stderr || clearProjectGoalResult.stdout
 );
-assert.strictEqual(JSON.parse(clearProjectGoalResult.stdout).result.processingGoal, null);
+assert.strictEqual(parseJsonOutput(clearProjectGoalResult).result.processingGoal, null);
 
 const clearedGoalFetchResult = runCli([
   'fetch',
   'https://mp.weixin.qq.com/s/cleared-goal',
   '--json',
-], inheritanceHome, inheritanceProject, {
-  NODE_OPTIONS: `--require=${mockPuppeteerPath}`,
-  WECHAT_NOTEBANK_TEST_HTML_FILE: articleFixturePath,
-});
+], inheritanceHome, inheritanceProject, articleEnv);
 assert.strictEqual(
   clearedGoalFetchResult.status,
   0,
   clearedGoalFetchResult.stderr || clearedGoalFetchResult.stdout
 );
-const clearedGoalFetchOutput = JSON.parse(clearedGoalFetchResult.stdout);
+const clearedGoalFetchOutput = parseJsonOutput(clearedGoalFetchResult);
 assert.strictEqual(clearedGoalFetchOutput.result.processingGoal, null);
 assert.strictEqual(clearedGoalFetchOutput.result.autoProcess, false);
 
-const invalidRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-invalid-'));
-const invalidHome = path.join(invalidRoot, 'home');
-const invalidProject = path.join(invalidRoot, 'project');
+const {
+  root: invalidRoot,
+  home: invalidHome,
+  project: invalidProject,
+} = createSandbox('invalid');
 const validGlobalArchive = path.join(invalidRoot, 'global-archive');
-fs.mkdirSync(invalidHome, { recursive: true });
-fs.mkdirSync(invalidProject, { recursive: true });
 const validGlobalResult = runCli([
   'init',
   '--scope',
@@ -272,12 +281,9 @@ const invalidFetchResult = runCli([
   'fetch',
   'https://mp.weixin.qq.com/s/invalid-project-config',
   '--json',
-], invalidHome, invalidProject, {
-  NODE_OPTIONS: `--require=${mockPuppeteerPath}`,
-  WECHAT_NOTEBANK_TEST_HTML_FILE: articleFixturePath,
-});
+], invalidHome, invalidProject, articleEnv);
 assert.strictEqual(invalidFetchResult.status, 1);
-const invalidFetchOutput = JSON.parse(invalidFetchResult.stdout);
+const invalidFetchOutput = parseJsonOutput(invalidFetchResult);
 assert.strictEqual(invalidFetchOutput.error.code, 'CONFIG_INVALID');
 
 const rejectedArchivePath = path.join(invalidRoot, 'must-not-be-created');
@@ -290,7 +296,7 @@ const invalidInitResult = runCli([
   '--json',
 ], invalidHome, invalidProject);
 assert.strictEqual(invalidInitResult.status, 1);
-const invalidInitOutput = JSON.parse(invalidInitResult.stdout);
+const invalidInitOutput = parseJsonOutput(invalidInitResult);
 assert.strictEqual(invalidInitOutput.ok, false);
 assert.strictEqual(invalidInitOutput.command, 'init');
 assert.strictEqual(invalidInitOutput.status, 'failed');
@@ -298,11 +304,10 @@ assert.strictEqual(invalidInitOutput.error.code, 'CONFIG_INVALID');
 assert.strictEqual(fs.readFileSync(invalidProjectConfigPath, 'utf8'), invalidProjectConfig);
 assert.strictEqual(fs.existsSync(rejectedArchivePath), false);
 
-const writeFailureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-write-fail-'));
-const writeFailureHome = path.join(writeFailureRoot, 'home');
-const writeFailureProject = path.join(writeFailureRoot, 'project');
-fs.mkdirSync(writeFailureHome, { recursive: true });
-fs.mkdirSync(writeFailureProject, { recursive: true });
+const {
+  home: writeFailureHome,
+  project: writeFailureProject,
+} = createSandbox('write-fail');
 const writeFailureResult = runCli([
   'init',
   '--scope',
@@ -312,28 +317,51 @@ const writeFailureResult = runCli([
   '--json',
 ], writeFailureHome, writeFailureProject);
 assert.strictEqual(writeFailureResult.status, 1);
-const writeFailureOutput = JSON.parse(writeFailureResult.stdout);
+const writeFailureOutput = parseJsonOutput(writeFailureResult);
 assert.strictEqual(writeFailureOutput.error.code, 'TRANSACTION_FAILED');
 assert.strictEqual(
   fs.existsSync(path.join(writeFailureProject, '.wechat-notebank.json')),
   false
 );
 
+const configWriteFailureRoot = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'wechat-notebank-config-write-fail-')
+);
+const homeFilePath = path.join(configWriteFailureRoot, 'home-is-a-file');
+const configWriteFailureProject = path.join(configWriteFailureRoot, 'project');
+const rolledBackArchivePath = path.join(configWriteFailureRoot, 'archive-must-rollback');
+fs.writeFileSync(homeFilePath, 'not a directory');
+fs.mkdirSync(configWriteFailureProject, { recursive: true });
+const configWriteFailureResult = runCli([
+  'init',
+  '--scope',
+  'global',
+  '--archive-path',
+  rolledBackArchivePath,
+  '--json',
+], homeFilePath, configWriteFailureProject);
+assert.strictEqual(configWriteFailureResult.status, 1);
+assert.strictEqual(
+  parseJsonOutput(configWriteFailureResult).error.code,
+  'TRANSACTION_FAILED'
+);
+assert.strictEqual(fs.existsSync(rolledBackArchivePath), false);
+
 const missingRequiredResult = runCli([
   'init',
   '--json',
 ], invalidHome, invalidProject);
 assert.strictEqual(missingRequiredResult.status, 1);
-const missingRequiredOutput = JSON.parse(missingRequiredResult.stdout);
+const missingRequiredOutput = parseJsonOutput(missingRequiredResult);
 assert.strictEqual(missingRequiredOutput.error.code, 'CLI_USAGE_ERROR');
 assert.match(missingRequiredOutput.error.message, /--scope/);
 
-const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-legacy-'));
-const legacyHome = path.join(legacyRoot, 'home');
-const legacyProject = path.join(legacyRoot, 'project');
+const {
+  root: legacyRoot,
+  home: legacyHome,
+  project: legacyProject,
+} = createSandbox('legacy');
 const legacyArchive = path.join(legacyRoot, 'legacy-archive');
-fs.mkdirSync(legacyHome, { recursive: true });
-fs.mkdirSync(legacyProject, { recursive: true });
 fs.writeFileSync(
   path.join(legacyProject, '.wechat-notebank.json'),
   JSON.stringify({
@@ -346,21 +374,14 @@ const legacyFetchResult = runCli([
   'fetch',
   'https://mp.weixin.qq.com/s/legacy-config',
   '--json',
-], legacyHome, legacyProject, {
-  NODE_OPTIONS: `--require=${mockPuppeteerPath}`,
-  WECHAT_NOTEBANK_TEST_HTML_FILE: articleFixturePath,
-});
+], legacyHome, legacyProject, articleEnv);
 assert.strictEqual(legacyFetchResult.status, 0, legacyFetchResult.stderr || legacyFetchResult.stdout);
-const legacyFetchOutput = JSON.parse(legacyFetchResult.stdout);
+const legacyFetchOutput = parseJsonOutput(legacyFetchResult);
 assert.strictEqual(legacyFetchOutput.result.archiveRoot, legacyArchive);
 assert.strictEqual(legacyFetchOutput.result.processingGoal, null);
 assert.strictEqual(legacyFetchOutput.result.autoProcess, false);
 
-const bareInitRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-bare-init-'));
-const bareInitHome = path.join(bareInitRoot, 'home');
-const bareInitProject = path.join(bareInitRoot, 'project');
-fs.mkdirSync(bareInitHome, { recursive: true });
-fs.mkdirSync(bareInitProject, { recursive: true });
+const { home: bareInitHome, project: bareInitProject } = createSandbox('bare-init');
 const bareInitResult = runCli(['init'], bareInitHome, bareInitProject);
 assert.strictEqual(bareInitResult.status, 0, bareInitResult.stderr || bareInitResult.stdout);
 assert.match(bareInitResult.stdout, /初始化完成/);

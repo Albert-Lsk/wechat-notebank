@@ -36,12 +36,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getConfigPath = getConfigPath;
 exports.configExists = configExists;
 exports.readConfig = readConfig;
+exports.resolveConfigLayers = resolveConfigLayers;
 exports.readScopedConfig = readScopedConfig;
 exports.writeConfig = writeConfig;
 exports.createConfig = createConfig;
 const fs = __importStar(require("fs-extra"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
+const command_error_1 = require("./command-error");
 const storage_1 = require("./storage");
 const CONFIG_FILE = '.wechat-notebank.json';
 const GLOBAL_CONFIG_DIR = 'alskai-notebank';
@@ -59,6 +61,9 @@ async function configExists() {
 async function readConfig() {
     const globalConfig = await readScopedConfig('global');
     const projectConfig = await readScopedConfig('project');
+    return resolveConfigLayers(globalConfig, projectConfig);
+}
+function resolveConfigLayers(globalConfig, projectConfig) {
     if (!globalConfig && !projectConfig) {
         return null;
     }
@@ -86,7 +91,7 @@ async function readScopedConfig(scope) {
         data = await fs.readJson(configPath);
     }
     catch (error) {
-        throw new Error(`无法解析配置 ${configPath}: ${getErrorMessage(error)}`);
+        throw new Error(`无法解析配置 ${configPath}: ${(0, command_error_1.getErrorMessage)(error)}`);
     }
     validateStoredConfig(data, configPath);
     return data;
@@ -136,7 +141,4 @@ function validateOptionalString(config, key, configPath, allowEmpty) {
     if (typeof value !== 'string' || (!allowEmpty && value.trim().length === 0)) {
         throw new Error(`配置字段 ${key} 必须是${allowEmpty ? '' : '非空'}字符串: ${configPath}`);
     }
-}
-function getErrorMessage(error) {
-    return error instanceof Error ? error.message : String(error);
 }

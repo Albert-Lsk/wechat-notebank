@@ -49,6 +49,12 @@ function parseFetchArgs(args) {
     return { url, outputPath, json };
 }
 function parseInitArgs(args) {
+    if (args.length === 0) {
+        return {
+            kind: 'legacy',
+            json: false,
+        };
+    }
     let scope;
     let archivePath;
     let processingGoal;
@@ -99,21 +105,20 @@ function parseInitArgs(args) {
         }
         throw new Error(`Unknown init option: ${option}`);
     }
-    const hasOptions = args.length > 0;
-    if (hasOptions && !scope) {
+    if (!scope) {
         throw new Error('请提供 --scope <global|project>');
     }
-    if (hasOptions && !archivePath) {
+    if (!archivePath) {
         throw new Error('请提供 --archive-path <path>');
     }
     return {
+        kind: 'scoped',
         scope,
         archivePath,
         processingGoal,
         processingGoalProvided,
         autoProcess,
         json,
-        hasOptions,
     };
 }
 function isJsonOutputRequested(args) {

@@ -6,6 +6,7 @@ import {
   StoredWechatNotebankConfig,
   WechatNotebankConfig,
 } from '../types';
+import { getErrorMessage } from './command-error';
 import { getL1Path } from './storage';
 
 const CONFIG_FILE = '.wechat-notebank.json';
@@ -30,6 +31,13 @@ export async function configExists(): Promise<boolean> {
 export async function readConfig(): Promise<WechatNotebankConfig | null> {
   const globalConfig = await readScopedConfig('global');
   const projectConfig = await readScopedConfig('project');
+  return resolveConfigLayers(globalConfig, projectConfig);
+}
+
+export function resolveConfigLayers(
+  globalConfig: StoredWechatNotebankConfig | null,
+  projectConfig: StoredWechatNotebankConfig | null
+): WechatNotebankConfig | null {
   if (!globalConfig && !projectConfig) {
     return null;
   }
@@ -131,8 +139,4 @@ function validateOptionalString(
   if (typeof value !== 'string' || (!allowEmpty && value.trim().length === 0)) {
     throw new Error(`配置字段 ${key} 必须是${allowEmpty ? '' : '非空'}字符串: ${configPath}`);
   }
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -10,15 +10,22 @@ export interface ImportArgs {
   filePath: string;
 }
 
-export interface InitArgs {
-  scope?: ConfigScope;
-  archivePath?: string;
+export interface LegacyInitArgs {
+  kind: 'legacy';
+  json: false;
+}
+
+export interface ScopedInitArgs {
+  kind: 'scoped';
+  scope: ConfigScope;
+  archivePath: string;
   processingGoal?: string;
   processingGoalProvided: boolean;
   autoProcess?: boolean;
   json: boolean;
-  hasOptions: boolean;
 }
+
+export type InitArgs = LegacyInitArgs | ScopedInitArgs;
 
 export interface NormalizedCliArgs {
   command: string | undefined;
@@ -81,6 +88,13 @@ export function parseFetchArgs(args: string[]): FetchArgs {
 }
 
 export function parseInitArgs(args: string[]): InitArgs {
+  if (args.length === 0) {
+    return {
+      kind: 'legacy',
+      json: false,
+    };
+  }
+
   let scope: ConfigScope | undefined;
   let archivePath: string | undefined;
   let processingGoal: string | undefined;
@@ -139,22 +153,21 @@ export function parseInitArgs(args: string[]): InitArgs {
     throw new Error(`Unknown init option: ${option}`);
   }
 
-  const hasOptions = args.length > 0;
-  if (hasOptions && !scope) {
+  if (!scope) {
     throw new Error('请提供 --scope <global|project>');
   }
-  if (hasOptions && !archivePath) {
+  if (!archivePath) {
     throw new Error('请提供 --archive-path <path>');
   }
 
   return {
+    kind: 'scoped',
     scope,
     archivePath,
     processingGoal,
     processingGoalProvided,
     autoProcess,
     json,
-    hasOptions,
   };
 }
 

@@ -100,13 +100,8 @@ assert.throws(
 );
 
 assert.deepStrictEqual(parseInitArgs([]), {
-  scope: undefined,
-  archivePath: undefined,
-  processingGoal: undefined,
-  processingGoalProvided: false,
-  autoProcess: undefined,
+  kind: 'legacy',
   json: false,
-  hasOptions: false,
 });
 
 assert.deepStrictEqual(
@@ -121,13 +116,13 @@ assert.deepStrictEqual(
     '--json',
   ]),
   {
+    kind: 'scoped',
     scope: 'project',
     archivePath: '/tmp/project-archive',
     processingGoal: '提炼项目观点',
     processingGoalProvided: true,
     autoProcess: false,
     json: true,
-    hasOptions: true,
   }
 );
 
