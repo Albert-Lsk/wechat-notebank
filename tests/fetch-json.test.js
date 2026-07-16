@@ -51,6 +51,35 @@ assert.deepStrictEqual(output, {
 assert.match(result.stderr, /正在获取文章/);
 assert.ok(fs.existsSync(output.result.savedFile));
 
+const duplicateResult = runCli([
+  'fetch',
+  sourceUrl,
+  '--output',
+  archivePath,
+  '--json',
+], tempHome);
+
+assert.strictEqual(duplicateResult.status, 0, duplicateResult.stderr || duplicateResult.stdout);
+assert.deepStrictEqual(JSON.parse(duplicateResult.stdout), {
+  ok: true,
+  command: 'fetch',
+  status: 'skipped',
+  result: {
+    action: 'archive',
+    sourceUrl,
+    savedFile: output.result.savedFile,
+    archiveRoot: archivePath,
+    processingGoal: null,
+    autoProcess: false,
+    reason: 'SOURCE_URL_EXISTS',
+  },
+});
+assert.match(duplicateResult.stderr, /已存在，跳过/);
+assert.deepStrictEqual(
+  fs.readdirSync(archivePath).filter((fileName) => fileName.endsWith('.md')),
+  ['2026-07-16-AgentJSON接口测试文章.md']
+);
+
 const configuredHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-configured-'));
 const configuredArchivePath = path.join(configuredHome, 'configured-archive');
 fs.writeFileSync(

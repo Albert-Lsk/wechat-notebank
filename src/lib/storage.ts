@@ -72,8 +72,15 @@ export async function articleExistsBySourceUrl(
   archivePath: string,
   sourceUrl: string
 ): Promise<boolean> {
+  return (await findArticleBySourceUrl(archivePath, sourceUrl)) !== null;
+}
+
+export async function findArticleBySourceUrl(
+  archivePath: string,
+  sourceUrl: string
+): Promise<string | null> {
   if (!(await fs.pathExists(archivePath))) {
-    return false;
+    return null;
   }
 
   const entries = await fs.readdir(archivePath);
@@ -91,11 +98,11 @@ export async function articleExistsBySourceUrl(
     const fileContent = await fs.readFile(filePath, 'utf-8');
     const parsed = matter(fileContent);
     if (parsed.data?.sourceUrl === sourceUrl) {
-      return true;
+      return filePath;
     }
   }
 
-  return false;
+  return null;
 }
 
 async function getAvailableFilePath(archivePath: string, filename: string): Promise<string> {

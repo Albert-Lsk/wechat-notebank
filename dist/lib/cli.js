@@ -128,14 +128,25 @@ function isJsonOutputOption(value) {
     return value === JSON_OPTION;
 }
 function parseImportArgs(args) {
-    const [filePath, ...options] = args;
+    let filePath;
+    let json = false;
+    for (const option of args) {
+        if (isJsonOutputOption(option)) {
+            json = true;
+            continue;
+        }
+        if (option.startsWith('-')) {
+            throw new Error(`Unknown import option: ${option}`);
+        }
+        if (filePath) {
+            throw new Error(`Unexpected import argument: ${option}`);
+        }
+        filePath = option;
+    }
     if (!filePath) {
         throw new Error('请提供 Excel 文件地址');
     }
-    for (const option of options) {
-        throw new Error(`Unknown import option: ${option}`);
-    }
-    return { filePath };
+    return { filePath, json };
 }
 function looksLikeWechatArticleUrl(value) {
     return /^https?:\/\/mp\.weixin\.qq\.com\/s\//.test(value || '');

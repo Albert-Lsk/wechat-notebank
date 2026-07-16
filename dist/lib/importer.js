@@ -35,7 +35,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.importWorkbook = importWorkbook;
 const XLSX = __importStar(require("xlsx"));
-async function importWorkbook(filePath, archiveRow) {
+const command_error_1 = require("./command-error");
+async function importWorkbook(filePath, archiveRow, options = {}) {
     const rows = readImportRows(filePath);
     const summary = {
         success: 0,
@@ -43,9 +44,19 @@ async function importWorkbook(filePath, archiveRow) {
         skipped: 0,
         failures: [],
     };
+    if (options.collectItems) {
+        summary.items = [];
+    }
     for (const row of rows) {
         if (!isCompleteRow(row.values)) {
             summary.skipped++;
+            summary.items?.push({
+                rowNumber: row.rowNumber,
+                sequence: row.values[0],
+                sourceUrl: row.values[1],
+                status: 'skipped',
+                reason: 'INCOMPLETE_ROW',
+            });
             continue;
         }
         const importRow = {
@@ -58,16 +69,41 @@ async function importWorkbook(filePath, archiveRow) {
             const result = await archiveRow(importRow);
             if (result?.status === 'skipped') {
                 summary.skipped++;
+                summary.items?.push(toItemResult(importRow, 'skipped', result));
+            }
+            else if (result?.status === 'failed') {
+                const error = result.error || {
+                    code: 'TRANSACTION_FAILED',
+                    message: result.message || '归档失败',
+                };
+                summary.failure++;
+                summary.failures.push({
+                    ...importRow,
+                    message: error.message,
+                });
+                summary.items?.push(toItemResult(importRow, 'failed', {
+                    ...result,
+                    error,
+                }));
             }
             else {
                 summary.success++;
+                summary.items?.push(toItemResult(importRow, 'saved', result || undefined));
             }
         }
         catch (error) {
+            const itemError = toImportItemError(error);
             summary.failure++;
             summary.failures.push({
                 ...importRow,
-                message: getErrorMessage(error),
+                message: itemError.message,
+            });
+            summary.items?.push({
+                rowNumber: importRow.rowNumber,
+                sequence: importRow.sequence,
+                sourceUrl: importRow.url,
+                status: 'failed',
+                error: itemError,
             });
         }
     }
@@ -142,11 +178,29 @@ function looksLikeWechatArticleUrl(value) {
     return /^https?:\/\/mp\.weixin\.qq\.com\/s\//.test(value);
 }
 function isCompleteRow(values) {
-    return values[1].length > 0 && values[2].length > 0;
+    return values[1].length > 0;
 }
-function getErrorMessage(error) {
-    if (error instanceof Error) {
-        return error.message;
+function toItemResult(row, status, result) {
+    return {
+        rowNumber: row.rowNumber,
+        sequence: row.sequence,
+        sourceUrl: row.url,
+        status,
+        ...(result?.archiveRoot ? { archiveRoot: result.archiveRoot } : {}),
+        ...(result?.savedFile ? { savedFile: result.savedFile } : {}),
+        ...(result?.reason ? { reason: result.reason } : {}),
+        ...(result?.error ? { error: result.error } : {}),
+    };
+}
+function toImportItemError(error) {
+    if (error instanceof command_error_1.CommandError) {
+        return {
+            code: error.code,
+            message: error.message,
+        };
     }
-    return String(error);
+    return {
+        code: 'TRANSACTION_FAILED',
+        message: (0, command_error_1.getErrorMessage)(error),
+    };
 }

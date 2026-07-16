@@ -41,6 +41,7 @@ exports.ensureDirectories = ensureDirectories;
 exports.generateFilename = generateFilename;
 exports.saveArticle = saveArticle;
 exports.articleExistsBySourceUrl = articleExistsBySourceUrl;
+exports.findArticleBySourceUrl = findArticleBySourceUrl;
 exports.getL1Path = getL1Path;
 const fs = __importStar(require("fs-extra"));
 const path = __importStar(require("path"));
@@ -93,8 +94,11 @@ async function saveArticle(archivePath, title, content, meta) {
     return filePath;
 }
 async function articleExistsBySourceUrl(archivePath, sourceUrl) {
+    return (await findArticleBySourceUrl(archivePath, sourceUrl)) !== null;
+}
+async function findArticleBySourceUrl(archivePath, sourceUrl) {
     if (!(await fs.pathExists(archivePath))) {
-        return false;
+        return null;
     }
     const entries = await fs.readdir(archivePath);
     for (const entry of entries) {
@@ -109,10 +113,10 @@ async function articleExistsBySourceUrl(archivePath, sourceUrl) {
         const fileContent = await fs.readFile(filePath, 'utf-8');
         const parsed = (0, gray_matter_1.default)(fileContent);
         if (parsed.data?.sourceUrl === sourceUrl) {
-            return true;
+            return filePath;
         }
     }
-    return false;
+    return null;
 }
 async function getAvailableFilePath(archivePath, filename) {
     const parsed = path.parse(filename);

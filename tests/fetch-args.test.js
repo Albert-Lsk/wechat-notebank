@@ -86,6 +86,15 @@ assert.deepStrictEqual(
   parseImportArgs(['/tmp/articles.xlsx']),
   {
     filePath: '/tmp/articles.xlsx',
+    json: false,
+  }
+);
+
+assert.deepStrictEqual(
+  parseImportArgs(['--json', '/tmp/articles.xlsx']),
+  {
+    filePath: '/tmp/articles.xlsx',
+    json: true,
   }
 );
 

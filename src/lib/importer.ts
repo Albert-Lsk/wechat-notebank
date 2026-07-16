@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { CommandError, CommandErrorCode, getErrorMessage } from './command-error';
 
 export interface ImportRow {
   sequence: string;
@@ -16,11 +17,36 @@ export interface ImportSummary {
   failure: number;
   skipped: number;
   failures: ImportFailure[];
+  items?: ImportItemResult[];
 }
 
 export interface ArchiveRowResult {
-  status?: 'archived' | 'skipped';
+  status?: 'archived' | 'skipped' | 'failed';
   message?: string;
+  archiveRoot?: string;
+  savedFile?: string;
+  reason?: string;
+  error?: ImportItemError;
+}
+
+export interface ImportItemError {
+  code: CommandErrorCode;
+  message: string;
+}
+
+export interface ImportItemResult {
+  rowNumber: number;
+  sequence: string;
+  sourceUrl: string;
+  status: 'saved' | 'skipped' | 'failed';
+  archiveRoot?: string;
+  savedFile?: string;
+  reason?: string;
+  error?: ImportItemError;
+}
+
+export interface ImportWorkbookOptions {
+  collectItems?: boolean;
 }
 
 export type ArchiveRow = (row: ImportRow) => Promise<void | ArchiveRowResult>;
@@ -38,7 +64,8 @@ interface ImportColumnLayout {
 
 export async function importWorkbook(
   filePath: string,
-  archiveRow: ArchiveRow
+  archiveRow: ArchiveRow,
+  options: ImportWorkbookOptions = {}
 ): Promise<ImportSummary> {
   const rows = readImportRows(filePath);
   const summary: ImportSummary = {
@@ -47,10 +74,20 @@ export async function importWorkbook(
     skipped: 0,
     failures: [],
   };
+  if (options.collectItems) {
+    summary.items = [];
+  }
 
   for (const row of rows) {
     if (!isCompleteRow(row.values)) {
       summary.skipped++;
+      summary.items?.push({
+        rowNumber: row.rowNumber,
+        sequence: row.values[0],
+        sourceUrl: row.values[1],
+        status: 'skipped',
+        reason: 'INCOMPLETE_ROW',
+      });
       continue;
     }
 
@@ -65,14 +102,38 @@ export async function importWorkbook(
       const result = await archiveRow(importRow);
       if (result?.status === 'skipped') {
         summary.skipped++;
+        summary.items?.push(toItemResult(importRow, 'skipped', result));
+      } else if (result?.status === 'failed') {
+        const error = result.error || {
+          code: 'TRANSACTION_FAILED',
+          message: result.message || '归档失败',
+        };
+        summary.failure++;
+        summary.failures.push({
+          ...importRow,
+          message: error.message,
+        });
+        summary.items?.push(toItemResult(importRow, 'failed', {
+          ...result,
+          error,
+        }));
       } else {
         summary.success++;
+        summary.items?.push(toItemResult(importRow, 'saved', result || undefined));
       }
     } catch (error) {
+      const itemError = toImportItemError(error);
       summary.failure++;
       summary.failures.push({
         ...importRow,
-        message: getErrorMessage(error),
+        message: itemError.message,
+      });
+      summary.items?.push({
+        rowNumber: importRow.rowNumber,
+        sequence: importRow.sequence,
+        sourceUrl: importRow.url,
+        status: 'failed',
+        error: itemError,
       });
     }
   }
@@ -167,13 +228,36 @@ function looksLikeWechatArticleUrl(value: string): boolean {
 }
 
 function isCompleteRow(values: string[]): boolean {
-  return values[1].length > 0 && values[2].length > 0;
+  return values[1].length > 0;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
+function toItemResult(
+  row: ImportRow,
+  status: ImportItemResult['status'],
+  result?: ArchiveRowResult
+): ImportItemResult {
+  return {
+    rowNumber: row.rowNumber,
+    sequence: row.sequence,
+    sourceUrl: row.url,
+    status,
+    ...(result?.archiveRoot ? { archiveRoot: result.archiveRoot } : {}),
+    ...(result?.savedFile ? { savedFile: result.savedFile } : {}),
+    ...(result?.reason ? { reason: result.reason } : {}),
+    ...(result?.error ? { error: result.error } : {}),
+  };
+}
+
+function toImportItemError(error: unknown): ImportItemError {
+  if (error instanceof CommandError) {
+    return {
+      code: error.code,
+      message: error.message,
+    };
   }
 
-  return String(error);
+  return {
+    code: 'TRANSACTION_FAILED',
+    message: getErrorMessage(error),
+  };
 }

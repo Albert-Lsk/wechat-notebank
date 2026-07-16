@@ -235,6 +235,7 @@ const { importWorkbook } = require('../dist/lib/importer');
     filename: fetchModulePath,
     loaded: true,
     exports: {
+      resolveArchivePath: (_config, outputPath) => outputPath,
       archiveArticle: async (url, outputPath) => {
         if (url.endsWith('/fail')) {
           throw new Error('network unavailable');
@@ -309,6 +310,7 @@ const { importWorkbook } = require('../dist/lib/importer');
     filename: commandSkipFetchModulePath,
     loaded: true,
     exports: {
+      resolveArchivePath: (_config, outputPath) => outputPath,
       archiveArticle: async (url, outputPath) => {
         archivedCommandUrls.push(url);
         return { filePath: path.join(outputPath, 'article.md') };
@@ -320,7 +322,8 @@ const { importWorkbook } = require('../dist/lib/importer');
     filename: commandSkipStorageModulePath,
     loaded: true,
     exports: {
-      articleExistsBySourceUrl: async (_outputPath, url) => url.endsWith('/existing'),
+      findArticleBySourceUrl: async (outputPath, url) =>
+        url.endsWith('/existing') ? path.join(outputPath, 'article.md') : null,
     },
   };
 

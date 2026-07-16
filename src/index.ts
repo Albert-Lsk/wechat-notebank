@@ -29,12 +29,14 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                                           配置全局默认或项目覆盖
   alskai-notebank <url> [--output <folder>] [--json]
                                           存档文章
-  alskai-notebank import <Excel文件地址>   批量导入文章
+  alskai-notebank import <Excel文件地址> [--json]
+                                          批量导入文章
 
 兼容命令:
   wechat-notebank fetch <url> [--output <folder>] [--json]
                                           存档文章
-  wechat-notebank import <Excel文件地址>   批量导入文章
+  wechat-notebank import <Excel文件地址> [--json]
+                                          批量导入文章
   wechat-notebank --help                  显示帮助
 
 示例:
@@ -138,7 +140,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
         writeJsonOutput({
           ok: true,
           command: 'fetch',
-          status: 'saved',
+          status: result.reason === 'SOURCE_URL_EXISTS' ? 'skipped' : 'saved',
           result,
         });
       }
@@ -160,20 +162,57 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
   // import 命令
   if (command === 'import') {
+    const jsonRequested = isJsonOutputRequested(args);
     let importArgs;
     try {
       importArgs = parseImportArgs(args);
     } catch (error) {
-      console.error(`❌ ${error instanceof Error ? error.message : '参数错误'}`);
-      console.error('   用法: alskai-notebank import <Excel文件地址>');
-      process.exit(1);
+      const commandError = new CommandError('CLI_USAGE_ERROR', getErrorMessage(error));
+      if (jsonRequested) {
+        writeCommandJsonFailure('import', commandError);
+        return;
+      }
+      console.error(`❌ ${commandError.message}`);
+      console.error('   用法: alskai-notebank import <Excel文件地址> [--json]');
+      process.exitCode = 1;
+      return;
     }
 
     try {
-      await importCommand(importArgs.filePath);
+      const result = await importCommand(importArgs.filePath, { json: importArgs.json });
+      if (importArgs.json) {
+        if (result.summary.failure > 0) {
+          const message = `批量导入完成，但有 ${result.summary.failure} 行失败`;
+          writeJsonOutput({
+            ok: false,
+            command: 'import',
+            status: 'partial',
+            result,
+            error: {
+              code: 'TRANSACTION_FAILED',
+              message,
+            },
+          });
+          process.exitCode = 1;
+        } else {
+          writeJsonOutput({
+            ok: true,
+            command: 'import',
+            status: 'completed',
+            result,
+          });
+        }
+      }
     } catch (error) {
-      console.error(`\n❌ 导入失败: ${error instanceof Error ? error.message : '未知错误'}`);
-      process.exit(1);
+      const commandError = error instanceof CommandError
+        ? error
+        : new CommandError('TRANSACTION_FAILED', getErrorMessage(error));
+      if (importArgs.json) {
+        writeCommandJsonFailure('import', commandError);
+        return;
+      }
+      console.error(`\n❌ 导入失败: ${commandError.message}`);
+      process.exitCode = 1;
     }
     return;
   }

@@ -54,6 +54,19 @@ async function fetchCommand(url, outputPath, options = {}) {
         throw new command_error_1.CommandError('CONFIG_INVALID', (0, command_error_1.getErrorMessage)(error));
     }
     const log = options.json ? console.error : console.log;
+    const existingFile = await (0, storage_1.findArticleBySourceUrl)(archivePath, url);
+    if (existingFile) {
+        log(`⏭️  已存在，跳过: ${url}`);
+        return {
+            action: 'archive',
+            sourceUrl: url,
+            savedFile: existingFile,
+            archiveRoot: archivePath,
+            processingGoal: config?.processingGoal ?? null,
+            autoProcess: config?.autoProcess ?? false,
+            reason: 'SOURCE_URL_EXISTS',
+        };
+    }
     log(`📥 正在获取文章: ${url}`);
     const { filePath, meta } = await archiveArticle(url, archivePath);
     if (!options.json) {

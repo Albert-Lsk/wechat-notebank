@@ -1,5 +1,5 @@
 import { fetchArticleHtml, parseWechatArticle, buildMeta } from '../lib/parser';
-import { saveArticle } from '../lib/storage';
+import { findArticleBySourceUrl, saveArticle } from '../lib/storage';
 import { readConfig } from '../lib/config';
 import { ArticleMeta, ParseResult, WechatNotebankConfig } from '../types';
 import { CommandError, getErrorMessage } from '../lib/command-error';
@@ -18,6 +18,7 @@ export interface FetchCommandResult {
   archiveRoot: string;
   processingGoal: string | null;
   autoProcess: boolean;
+  reason?: 'SOURCE_URL_EXISTS';
 }
 
 export interface FetchCommandOptions {
@@ -39,6 +40,20 @@ export async function fetchCommand(
     throw new CommandError('CONFIG_INVALID', getErrorMessage(error));
   }
   const log = options.json ? console.error : console.log;
+
+  const existingFile = await findArticleBySourceUrl(archivePath, url);
+  if (existingFile) {
+    log(`⏭️  已存在，跳过: ${url}`);
+    return {
+      action: 'archive',
+      sourceUrl: url,
+      savedFile: existingFile,
+      archiveRoot: archivePath,
+      processingGoal: config?.processingGoal ?? null,
+      autoProcess: config?.autoProcess ?? false,
+      reason: 'SOURCE_URL_EXISTS',
+    };
+  }
 
   log(`📥 正在获取文章: ${url}`);
 

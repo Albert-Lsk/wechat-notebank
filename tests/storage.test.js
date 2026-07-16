@@ -2,7 +2,12 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { articleExistsBySourceUrl, generateFilename, saveArticle } = require('../dist/lib/storage');
+const {
+  articleExistsBySourceUrl,
+  findArticleBySourceUrl,
+  generateFilename,
+  saveArticle,
+} = require('../dist/lib/storage');
 
 (async () => {
   assert.strictEqual(
@@ -47,12 +52,20 @@ const { articleExistsBySourceUrl, generateFilename, saveArticle } = require('../
     true
   );
   assert.strictEqual(
+    await findArticleBySourceUrl(archivePath, 'https://mp.weixin.qq.com/s/example'),
+    filePath
+  );
+  assert.strictEqual(
     await articleExistsBySourceUrl(archivePath, 'https://mp.weixin.qq.com/s/missing'),
     false
   );
   assert.strictEqual(
     await articleExistsBySourceUrl(path.join(archivePath, 'missing-folder'), 'https://mp.weixin.qq.com/s/example'),
     false
+  );
+  assert.strictEqual(
+    await findArticleBySourceUrl(archivePath, 'https://mp.weixin.qq.com/s/missing'),
+    null
   );
 
   console.log('storage tests passed');

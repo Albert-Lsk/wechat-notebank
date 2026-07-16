@@ -8,6 +8,7 @@ export interface FetchArgs {
 
 export interface ImportArgs {
   filePath: string;
+  json: boolean;
 }
 
 export interface LegacyInitArgs {
@@ -180,17 +181,31 @@ function isJsonOutputOption(value: string): boolean {
 }
 
 export function parseImportArgs(args: string[]): ImportArgs {
-  const [filePath, ...options] = args;
+  let filePath: string | undefined;
+  let json = false;
+
+  for (const option of args) {
+    if (isJsonOutputOption(option)) {
+      json = true;
+      continue;
+    }
+
+    if (option.startsWith('-')) {
+      throw new Error(`Unknown import option: ${option}`);
+    }
+
+    if (filePath) {
+      throw new Error(`Unexpected import argument: ${option}`);
+    }
+
+    filePath = option;
+  }
 
   if (!filePath) {
     throw new Error('请提供 Excel 文件地址');
   }
 
-  for (const option of options) {
-    throw new Error(`Unknown import option: ${option}`);
-  }
-
-  return { filePath };
+  return { filePath, json };
 }
 
 function looksLikeWechatArticleUrl(value: string | undefined): boolean {
