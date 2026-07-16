@@ -14,8 +14,13 @@ const SOURCE_LOCK_OWNER_FILE = 'owner.json';
 const PROCESS_IDENTITY_CACHE_MS = 1_000;
 const execFileAsync = promisify(execFile);
 
+type ProcessIdentityResult =
+  | { status: 'found'; identity: string }
+  | { status: 'missing' }
+  | { status: 'unknown' };
+
 const processIdentityCache = new Map<number, {
-  identity: string | null;
+  result: ProcessIdentityResult;
   expiresAt: number;
 }>();
 
@@ -135,14 +140,14 @@ export async function withSourceUrlLock<T>(
   const lockPath = path.join(lockDirectory, `${lockName}.lock`);
   await fs.ensureDir(lockDirectory);
 
-  const processStartedAt = await getProcessStartedAt(process.pid);
-  if (!processStartedAt) {
+  const currentProcessIdentity = await getProcessIdentity(process.pid);
+  if (currentProcessIdentity.status !== 'found') {
     throw new Error(`无法读取进程启动身份: ${process.pid}`);
   }
   const owner: SourceLockOwner = {
     pid: process.pid,
     token: randomUUID(),
-    processStartedAt,
+    processStartedAt: currentProcessIdentity.identity,
   };
   const candidatePath = `${lockPath}.candidate-${owner.token}`;
   try {
@@ -194,8 +199,14 @@ async function quarantineAbandonedLock(lockPath: string): Promise<boolean> {
 
   const { owner, stat } = inspection;
   if (owner) {
-    const currentProcessStartedAt = await getProcessStartedAt(owner.pid);
-    if (currentProcessStartedAt === owner.processStartedAt) {
+    const currentProcessIdentity = await getProcessIdentity(owner.pid);
+    if (currentProcessIdentity.status === 'unknown') {
+      return false;
+    }
+    if (
+      currentProcessIdentity.status === 'found' &&
+      currentProcessIdentity.identity === owner.processStartedAt
+    ) {
       return false;
     }
   } else if (Date.now() - stat.mtimeMs < INVALID_OWNER_STALE_MS) {
@@ -294,30 +305,42 @@ function isSourceLockOwner(value: unknown): value is SourceLockOwner {
   );
 }
 
-async function getProcessStartedAt(pid: number): Promise<string | null> {
+async function getProcessIdentity(pid: number): Promise<ProcessIdentityResult> {
   const cached = processIdentityCache.get(pid);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.identity;
+    return cached.result;
   }
 
-  let identity: string | null;
+  let result: ProcessIdentityResult;
   try {
     const { stdout } = await execFileAsync('/bin/ps', [
       '-p',
       String(pid),
       '-o',
       'lstart=',
-    ]);
-    identity = stdout.trim() || null;
-  } catch {
-    identity = null;
+    ], {
+      env: {
+        ...process.env,
+        TZ: 'UTC',
+        LC_ALL: 'C',
+        LANG: 'C',
+      },
+    });
+    const identity = stdout.trim();
+    result = identity
+      ? { status: 'found', identity }
+      : { status: 'unknown' };
+  } catch (error) {
+    result = hasNumericErrorCode(error, 1)
+      ? { status: 'missing' }
+      : { status: 'unknown' };
   }
 
   processIdentityCache.set(pid, {
-    identity,
+    result,
     expiresAt: Date.now() + PROCESS_IDENTITY_CACHE_MS,
   });
-  return identity;
+  return result;
 }
 
 function hasErrorCode(error: unknown, code: string): boolean {
@@ -326,6 +349,15 @@ function hasErrorCode(error: unknown, code: string): boolean {
     typeof error === 'object' &&
     'code' in error &&
     (error as NodeJS.ErrnoException).code === code
+  );
+}
+
+function hasNumericErrorCode(error: unknown, code: number): boolean {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code?: unknown }).code === code
   );
 }
 

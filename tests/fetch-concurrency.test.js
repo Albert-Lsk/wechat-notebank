@@ -10,12 +10,13 @@ const cliPath = path.join(projectRoot, 'dist', 'index.js');
 const mockPuppeteerPath = path.join(__dirname, 'helpers', 'mock-puppeteer.js');
 const articleFixturePath = path.join(__dirname, 'fixtures', 'wechat-article.html');
 
-function runCli(args, homePath) {
+function runCli(args, homePath, extraEnv = {}) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [cliPath, ...args], {
       cwd: homePath,
       env: {
         ...process.env,
+        ...extraEnv,
         HOME: homePath,
         NODE_OPTIONS: `--require=${mockPuppeteerPath}`,
         WECHAT_NOTEBANK_TEST_HTML_FILE: articleFixturePath,
@@ -58,6 +59,27 @@ function runCli(args, homePath) {
   assert.strictEqual(outputs[0].result.savedFile, outputs[1].result.savedFile);
   assert.strictEqual(
     fs.readdirSync(archivePath).filter((fileName) => fileName.endsWith('.md')).length,
+    1
+  );
+
+  const timezoneArchivePath = path.join(tempHome, 'timezone-archive');
+  const timezoneUrl = 'https://mp.weixin.qq.com/s/timezone-concurrent';
+  const timezoneArgs = ['fetch', timezoneUrl, '--output', timezoneArchivePath, '--json'];
+  const timezoneResults = await Promise.all([
+    runCli(timezoneArgs, tempHome, { TZ: 'Asia/Shanghai' }),
+    runCli(timezoneArgs, tempHome, { TZ: 'UTC' }),
+  ]);
+  for (const result of timezoneResults) {
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  }
+  assert.deepStrictEqual(
+    timezoneResults
+      .map((result) => JSON.parse(result.stdout).status)
+      .sort(),
+    ['saved', 'skipped']
+  );
+  assert.strictEqual(
+    fs.readdirSync(timezoneArchivePath).filter((fileName) => fileName.endsWith('.md')).length,
     1
   );
 

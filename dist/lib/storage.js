@@ -134,14 +134,14 @@ async function withSourceUrlLock(archivePath, sourceUrl, action) {
     const lockName = (0, crypto_1.createHash)('sha256').update(sourceUrl).digest('hex');
     const lockPath = path.join(lockDirectory, `${lockName}.lock`);
     await fs.ensureDir(lockDirectory);
-    const processStartedAt = await getProcessStartedAt(process.pid);
-    if (!processStartedAt) {
+    const currentProcessIdentity = await getProcessIdentity(process.pid);
+    if (currentProcessIdentity.status !== 'found') {
         throw new Error(`无法读取进程启动身份: ${process.pid}`);
     }
     const owner = {
         pid: process.pid,
         token: (0, crypto_1.randomUUID)(),
-        processStartedAt,
+        processStartedAt: currentProcessIdentity.identity,
     };
     const candidatePath = `${lockPath}.candidate-${owner.token}`;
     try {
@@ -193,8 +193,12 @@ async function quarantineAbandonedLock(lockPath) {
     }
     const { owner, stat } = inspection;
     if (owner) {
-        const currentProcessStartedAt = await getProcessStartedAt(owner.pid);
-        if (currentProcessStartedAt === owner.processStartedAt) {
+        const currentProcessIdentity = await getProcessIdentity(owner.pid);
+        if (currentProcessIdentity.status === 'unknown') {
+            return false;
+        }
+        if (currentProcessIdentity.status === 'found' &&
+            currentProcessIdentity.identity === owner.processStartedAt) {
             return false;
         }
     }
@@ -279,31 +283,49 @@ function isSourceLockOwner(value) {
         typeof owner.processStartedAt === 'string' &&
         owner.processStartedAt.length > 0);
 }
-async function getProcessStartedAt(pid) {
+async function getProcessIdentity(pid) {
     const cached = processIdentityCache.get(pid);
     if (cached && cached.expiresAt > Date.now()) {
-        return cached.identity;
+        return cached.result;
     }
-    let identity;
+    let result;
     try {
         const { stdout } = await execFileAsync('/bin/ps', [
             '-p',
             String(pid),
             '-o',
             'lstart=',
-        ]);
-        identity = stdout.trim() || null;
+        ], {
+            env: {
+                ...process.env,
+                TZ: 'UTC',
+                LC_ALL: 'C',
+                LANG: 'C',
+            },
+        });
+        const identity = stdout.trim();
+        result = identity
+            ? { status: 'found', identity }
+            : { status: 'unknown' };
     }
-    catch {
-        identity = null;
+    catch (error) {
+        result = hasNumericErrorCode(error, 1)
+            ? { status: 'missing' }
+            : { status: 'unknown' };
     }
     processIdentityCache.set(pid, {
-        identity,
+        result,
         expiresAt: Date.now() + PROCESS_IDENTITY_CACHE_MS,
     });
-    return identity;
+    return result;
 }
 function hasErrorCode(error, code) {
+    return Boolean(error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === code);
+}
+function hasNumericErrorCode(error, code) {
     return Boolean(error &&
         typeof error === 'object' &&
         'code' in error &&
