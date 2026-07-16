@@ -1,4 +1,4 @@
-使用本地 `alskai-notebank` CLI，把值得保留的微信公众号文章归档为本地 Markdown，沉淀到 Obsidian、Logseq 或普通文件夹。
+使用已安装的 `alskai-notebank` Skill 作为唯一的意图路由和执行说明来源。Agent 是操作界面，CLI 负责确定性的配置解析、归档、去重和结构化结果。
 
 Arguments:
 
@@ -6,26 +6,4 @@ Arguments:
 $ARGUMENTS
 ```
 
-将这个命令作为 CLI 的轻量入口。不要在命令层重新实现抓取或解析。
-
-Steps:
-
-1. Verify `alskai-notebank` is installed:
-   ```bash
-   command -v alskai-notebank
-   ```
-2. If arguments start with `import` and the file ends with `.numbers`, export it to a temporary `.xlsx` with macOS Numbers, then run:
-   ```bash
-   alskai-notebank import <exported.xlsx>
-   ```
-3. If arguments start with `import` and the file is already Excel, run:
-   ```bash
-   alskai-notebank $ARGUMENTS
-   ```
-4. Otherwise treat the arguments as a single-article archive request and run:
-   ```bash
-   alskai-notebank $ARGUMENTS
-   ```
-5. Summarize saved files, skipped rows, and failures from the CLI output.
-
-Never perform WeChat account interactions such as liking, favoriting, or commenting.
+把 `$ARGUMENTS` 视为用户原始请求，按 Skill 入口选择当前任务所需的单一参考文件并完整执行。不要在斜杠命令中复制另一套工作流，也不要加载与当前意图无关的加工说明。
