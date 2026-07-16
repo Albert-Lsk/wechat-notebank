@@ -151,6 +151,47 @@ const skippedCandidateOutput = JSON.parse(skippedCandidateId.result.stdout);
 assert.strictEqual(skippedCandidateOutput.error.code, 'MANIFEST_INVALID');
 assert.match(skippedCandidateOutput.error.message, /L3-01/);
 
+const tooManyAtomicNotes = runInvalidManifest({
+  atomicNotes: Array.from({ length: 100 }, (_, index) => ({
+    id: `L2-${String(index + 1).padStart(2, '0')}`,
+    title: `观点 ${index + 1}`,
+    claim: `观点 ${index + 1}`,
+    evidence: '正文中存在的原句。',
+    boundary: '测试两位编号边界。',
+    useCases: [],
+  })),
+});
+assert.strictEqual(tooManyAtomicNotes.result.status, 1);
+assert.strictEqual(JSON.parse(tooManyAtomicNotes.result.stdout).error.code, 'MANIFEST_INVALID');
+assert.strictEqual(fs.existsSync(path.join(tooManyAtomicNotes.root, 'vault', 'Inbox')), false);
+assert.strictEqual(
+  fs.readFileSync(tooManyAtomicNotes.sourceFile, 'utf8'),
+  tooManyAtomicNotes.sourceContent
+);
+
+const tooManyMaterials = runInvalidManifest({
+  materials: Array.from({ length: 100 }, (_, index) => ({
+    id: `L3-${String(index + 1).padStart(2, '0')}`,
+    kind: 'paraphrase',
+    title: `素材 ${index + 1}`,
+    content: `素材内容 ${index + 1}`,
+    sourceSection: '正文',
+  })),
+});
+assert.strictEqual(tooManyMaterials.result.status, 1);
+assert.strictEqual(JSON.parse(tooManyMaterials.result.stdout).error.code, 'MANIFEST_INVALID');
+assert.strictEqual(fs.existsSync(path.join(tooManyMaterials.root, 'vault', 'Inbox')), false);
+
+const tooManyQuestions = runInvalidManifest({
+  reviewQuestions: Array.from({ length: 100 }, (_, index) => ({
+    id: `L4-Q${String(index + 1).padStart(2, '0')}`,
+    question: `问题 ${index + 1}`,
+  })),
+});
+assert.strictEqual(tooManyQuestions.result.status, 1);
+assert.strictEqual(JSON.parse(tooManyQuestions.result.stdout).error.code, 'MANIFEST_INVALID');
+assert.strictEqual(fs.existsSync(path.join(tooManyQuestions.root, 'vault', 'Inbox')), false);
+
 const malformedSource = runInvalidManifest({}, [
   '---',
   'title: [未闭合',

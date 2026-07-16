@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FileTransactionConflictError = void 0;
+exports.FileTransactionPreconditionError = exports.FileTransactionConflictError = void 0;
 exports.commitFileTransaction = commitFileTransaction;
 const fs = __importStar(require("fs-extra"));
 const path = __importStar(require("path"));
@@ -46,6 +46,13 @@ class FileTransactionConflictError extends Error {
     }
 }
 exports.FileTransactionConflictError = FileTransactionConflictError;
+class FileTransactionPreconditionError extends FileTransactionConflictError {
+    constructor(target, message) {
+        super(message);
+        this.target = target;
+    }
+}
+exports.FileTransactionPreconditionError = FileTransactionPreconditionError;
 async function commitFileTransaction(root, writes, hooks = {}) {
     assertUniqueTargets(writes);
     const transactionRoot = path.join(root, '.alskai-notebank', 'transactions', `${process.pid}-${(0, crypto_1.randomUUID)()}`);
@@ -62,7 +69,7 @@ async function commitFileTransaction(root, writes, hooks = {}) {
         for (const [index, write] of writes.entries()) {
             const existed = await pathExistsWithLstat(write.target);
             if (write.expectAbsent && existed) {
-                throw new FileTransactionConflictError(`事务目标已经存在: ${write.target}`);
+                throw new FileTransactionPreconditionError(write.target, `事务目标已经存在: ${write.target}`);
             }
             let original = null;
             if (existed) {
@@ -74,6 +81,14 @@ async function commitFileTransaction(root, writes, hooks = {}) {
                     throw new Error(`事务目标不是文件: ${write.target}`);
                 }
                 original = await fs.readFile(write.target);
+            }
+            if (write.expectedContent !== undefined) {
+                const expected = Buffer.isBuffer(write.expectedContent)
+                    ? write.expectedContent
+                    : Buffer.from(write.expectedContent);
+                if (!original || !original.equals(expected)) {
+                    throw new FileTransactionPreconditionError(write.target, `事务目标与命令读取时的内容不一致: ${write.target}`);
+                }
             }
             const staged = path.join(transactionRoot, 'staged', String(index));
             const backup = path.join(transactionRoot, 'backup', String(index));
@@ -97,10 +112,17 @@ async function commitFileTransaction(root, writes, hooks = {}) {
                 await fs.ensureDir(path.dirname(entry.backup));
                 await fs.move(entry.target, entry.backup);
                 entry.backupMoved = true;
+                await assertBackupUnchanged(entry);
             }
             await hooks.afterBackup?.(index, entry.target);
-            await fs.move(entry.staged, entry.target);
+            await linkFileNoClobber(entry.staged, entry.target);
             entry.stagedInstalled = true;
+            await fs.remove(entry.staged);
+        }
+        for (const entry of entries) {
+            if (entry.stagedInstalled && !(await targetMatchesWrite(entry))) {
+                throw new FileTransactionPreconditionError(entry.target, `事务目标在提交完成前发生变化: ${entry.target}`);
+            }
         }
     }
     catch (error) {
@@ -173,20 +195,33 @@ async function assertTargetUnchanged(entry) {
     const exists = await pathExistsWithLstat(entry.target);
     if (!entry.existed) {
         if (exists) {
-            throw new FileTransactionConflictError(`事务目标在提交前被创建: ${entry.target}`);
+            throw new FileTransactionPreconditionError(entry.target, `事务目标在提交前被创建: ${entry.target}`);
         }
         return;
     }
     if (!exists || !entry.original) {
-        throw new Error(`事务目标在提交前消失: ${entry.target}`);
+        throw new FileTransactionPreconditionError(entry.target, `事务目标在提交前消失: ${entry.target}`);
     }
     const stat = await fs.lstat(entry.target);
-    if (stat.isSymbolicLink()) {
-        throw new Error(`事务目标在提交前变为符号链接: ${entry.target}`);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+        throw new FileTransactionPreconditionError(entry.target, `事务目标在提交前改变类型: ${entry.target}`);
     }
     const current = await fs.readFile(entry.target);
     if (!current.equals(entry.original)) {
-        throw new Error(`事务目标在提交前发生变化: ${entry.target}`);
+        throw new FileTransactionPreconditionError(entry.target, `事务目标在提交前发生变化: ${entry.target}`);
+    }
+}
+async function assertBackupUnchanged(entry) {
+    if (!entry.original) {
+        throw new Error(`事务备份缺少原始快照: ${entry.target}`);
+    }
+    const stat = await fs.lstat(entry.backup);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+        throw new FileTransactionPreconditionError(entry.target, `事务目标在替换前改变类型: ${entry.target}`);
+    }
+    const backup = await fs.readFile(entry.backup);
+    if (!backup.equals(entry.original)) {
+        throw new FileTransactionPreconditionError(entry.target, `事务目标在替换前发生变化: ${entry.target}`);
     }
 }
 async function pathExistsWithLstat(target) {
@@ -202,15 +237,102 @@ async function pathExistsWithLstat(target) {
     }
 }
 async function restoreEntries(entries) {
+    const conflicts = [];
     for (const entry of [...entries].reverse()) {
+        const targetWasVacated = entry.stagedInstalled || entry.backupMoved;
         if (entry.stagedInstalled) {
-            await fs.remove(entry.target);
+            if (await pathExistsWithLstat(entry.target)) {
+                const rollbackCopy = rollbackCopyPath(entry);
+                await fs.ensureDir(path.dirname(rollbackCopy));
+                await fs.move(entry.target, rollbackCopy);
+                if (await fileMatchesWrite(rollbackCopy, entry)) {
+                    await fs.remove(rollbackCopy);
+                }
+                else {
+                    const conflict = rollbackConflictPath(entry);
+                    await fs.ensureDir(path.dirname(conflict));
+                    await fs.move(rollbackCopy, conflict);
+                    conflicts.push(conflict);
+                }
+            }
+            entry.stagedInstalled = false;
+        }
+        if (targetWasVacated) {
+            const lateConflict = await preserveLateTarget(entry);
+            if (lateConflict) {
+                conflicts.push(lateConflict);
+            }
         }
         if (entry.backupMoved) {
             await fs.ensureDir(path.dirname(entry.target));
-            await fs.move(entry.backup, entry.target);
+            try {
+                await linkFileNoClobber(entry.backup, entry.target);
+            }
+            catch (error) {
+                if (!(error instanceof FileTransactionPreconditionError)) {
+                    throw error;
+                }
+                const restoreConflict = await preserveLateTarget(entry, 'restore');
+                if (restoreConflict) {
+                    conflicts.push(restoreConflict);
+                }
+                await linkFileNoClobber(entry.backup, entry.target);
+            }
+            await fs.remove(entry.backup);
+            entry.backupMoved = false;
         }
     }
+    if (conflicts.length > 0) {
+        throw new Error(`回滚检测到并发修改，冲突副本保留在: ${conflicts.join(', ')}`);
+    }
+}
+async function targetMatchesWrite(entry) {
+    if (!(await pathExistsWithLstat(entry.target))) {
+        return false;
+    }
+    return fileMatchesWrite(entry.target, entry);
+}
+async function fileMatchesWrite(target, entry) {
+    const stat = await fs.lstat(target);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+        return false;
+    }
+    const current = await fs.readFile(target);
+    const written = Buffer.isBuffer(entry.content)
+        ? entry.content
+        : Buffer.from(entry.content);
+    return current.equals(written);
+}
+async function preserveLateTarget(entry, suffix = 'late') {
+    if (!(await pathExistsWithLstat(entry.target))) {
+        return null;
+    }
+    const preferred = `${rollbackConflictPath(entry)}-${suffix}`;
+    const conflict = await pathExistsWithLstat(preferred)
+        ? `${preferred}-${(0, crypto_1.randomUUID)()}`
+        : preferred;
+    await fs.ensureDir(path.dirname(conflict));
+    await fs.move(entry.target, conflict);
+    return conflict;
+}
+async function linkFileNoClobber(source, target) {
+    try {
+        await fs.link(source, target);
+    }
+    catch (error) {
+        if (error.code === 'EEXIST') {
+            throw new FileTransactionPreconditionError(target, `事务目标在原子安装前已存在: ${target}`);
+        }
+        throw error;
+    }
+}
+function rollbackCopyPath(entry) {
+    const transactionRoot = path.dirname(path.dirname(entry.backup));
+    return path.join(transactionRoot, 'rollback', path.basename(entry.backup));
+}
+function rollbackConflictPath(entry) {
+    const transactionRoot = path.dirname(path.dirname(entry.backup));
+    return path.join(transactionRoot, 'conflicts', path.basename(entry.backup));
 }
 async function findInitiallyMissingDirectories(root, transactionRoot, writes) {
     const starts = [

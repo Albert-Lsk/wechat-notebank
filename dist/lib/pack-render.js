@@ -6,11 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.setPackStatus = setPackStatus;
 exports.upsertDerivedLink = upsertDerivedLink;
 exports.withoutDerivedRegion = withoutDerivedRegion;
+exports.updatePackPublication = updatePackPublication;
 exports.renderPack = renderPack;
 const gray_matter_1 = __importDefault(require("gray-matter"));
 const command_error_1 = require("./command-error");
 const DERIVED_START = '<!-- alskai-notebank:derived:start -->';
 const DERIVED_END = '<!-- alskai-notebank:derived:end -->';
+const PUBLISHED_START = '<!-- alskai-notebank:published:start -->';
+const PUBLISHED_END = '<!-- alskai-notebank:published:end -->';
 function setPackStatus(content, supersededAt) {
     const document = (0, gray_matter_1.default)(content);
     return gray_matter_1.default.stringify(document.content, {
@@ -39,6 +42,16 @@ function withoutDerivedRegion(sourceContent) {
     }
     return `${sourceContent.slice(0, region.start)}${sourceContent.slice(region.endAfter)}`;
 }
+function updatePackPublication(packContent, status, approvedItems, links, updatedAt) {
+    const document = (0, gray_matter_1.default)(packContent);
+    const body = upsertManagedRegion(document.content, PUBLISHED_START, PUBLISHED_END, ['## 已发布内容', '', ...links].join('\n'));
+    return gray_matter_1.default.stringify(body, {
+        ...document.data,
+        status,
+        approvedItems,
+        updatedAt,
+    });
+}
 function findDerivedRegion(sourceContent) {
     const startMatches = sourceContent.split(DERIVED_START).length - 1;
     const endMatches = sourceContent.split(DERIVED_END).length - 1;
@@ -54,6 +67,23 @@ function findDerivedRegion(sourceContent) {
         throw new command_error_1.CommandError('MANIFEST_INVALID', '原文衍生内容受控区域顺序无效');
     }
     return { start, end, endAfter: end + DERIVED_END.length };
+}
+function upsertManagedRegion(content, startMarker, endMarker, body) {
+    const startCount = content.split(startMarker).length - 1;
+    const endCount = content.split(endMarker).length - 1;
+    if (startCount === 0 && endCount === 0) {
+        const separator = content.endsWith('\n') ? '\n' : '\n\n';
+        return `${content}${separator}${startMarker}\n${body}\n${endMarker}\n`;
+    }
+    if (startCount !== 1 || endCount !== 1) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', '加工包已发布内容受控区域损坏');
+    }
+    const start = content.indexOf(startMarker);
+    const end = content.indexOf(endMarker);
+    if (end < start) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', '加工包已发布内容起止标记顺序错误');
+    }
+    return `${content.slice(0, start)}${startMarker}\n${body}\n${content.slice(end)}`;
 }
 function renderPack(input) {
     const l2 = input.manifest.atomicNotes.length > 0

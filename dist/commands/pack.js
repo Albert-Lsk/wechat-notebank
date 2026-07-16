@@ -44,6 +44,8 @@ const command_error_1 = require("../lib/command-error");
 const storage_1 = require("../lib/storage");
 const file_transaction_1 = require("../lib/file-transaction");
 const pack_manifest_1 = require("../lib/pack-manifest");
+const pack_state_1 = require("../lib/pack-state");
+const pack_paths_1 = require("../lib/pack-paths");
 const pack_render_1 = require("../lib/pack-render");
 async function createPackCommand(args, transactionHooks = {}) {
     const sourceFile = path.resolve(args.sourceFile);
@@ -96,7 +98,12 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
     let existing = null;
     if (await fs.pathExists(stateFile)) {
         try {
-            existing = validateCurrentPackState(await fs.readJson(stateFile), packId, sourceFile, vaultRoot);
+            existing = (0, pack_state_1.validatePackState)(await fs.readJson(stateFile), {
+                vaultRoot,
+                expectedPackId: packId,
+                expectedSourceFile: sourceFile,
+                allowedStatuses: ['pending', 'partial', 'approved'],
+            });
         }
         catch (error) {
             throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', (0, command_error_1.getErrorMessage)(error));
@@ -109,7 +116,9 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
                 action: 'reuse',
                 packId,
                 revision: existing.revision,
-                status: existing.status === 'superseded' ? 'pending' : existing.status,
+                status: existing.status === 'partial' || existing.status === 'approved'
+                    ? existing.status
+                    : 'pending',
                 sourceFile,
                 sourceUrl: manifest.sourceUrl,
                 processingGoal,
@@ -118,10 +127,10 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
             };
         }
     }
-    const sourceWikiPath = toWikiPath(vaultRoot, sourceFile);
+    const sourceWikiPath = (0, pack_paths_1.toWikiPath)(vaultRoot, sourceFile);
     const revision = existing ? existing.revision + 1 : 1;
-    const packFile = path.join(vaultRoot, 'Inbox', `${sourceStem}-${packId.slice(0, 12)}-r${revision}.md`);
-    const packWikiPath = toWikiPath(vaultRoot, packFile);
+    const packFile = (0, pack_paths_1.packFilePath)(vaultRoot, sourceFile, packId, revision);
+    const packWikiPath = (0, pack_paths_1.toWikiPath)(vaultRoot, packFile);
     const createdAt = new Date().toISOString();
     const packContent = (0, pack_render_1.renderPack)({
         packId,
@@ -142,6 +151,8 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
         packFile,
         createdAt,
         manifest,
+        approvedItems: [],
+        outputs: [],
     };
     const revisionStateFile = path.join(path.dirname(stateFile), 'revisions', `${revision}.json`);
     const unexpectedTargets = [packFile, revisionStateFile];
@@ -171,18 +182,18 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
             });
             writes.push({
                 target: previousRevisionFile,
-                content: serializeJson(superseded),
+                content: (0, pack_state_1.serializePackState)(superseded),
             });
         }
         writes.push({ target: packFile, content: packContent, expectAbsent: true });
         writes.push({
             target: revisionStateFile,
-            content: serializeJson(state),
+            content: (0, pack_state_1.serializePackState)(state),
             expectAbsent: true,
         });
         writes.push({
             target: stateFile,
-            content: serializeJson(state),
+            content: (0, pack_state_1.serializePackState)(state),
             expectAbsent: !existing,
         });
         writes.push({ target: sourceFile, content: sourceWithLink });
@@ -206,46 +217,6 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
         stateFile,
     };
 }
-function serializeJson(value) {
-    return `${JSON.stringify(value, null, 2)}\n`;
-}
-function validateCurrentPackState(value, packId, sourceFile, vaultRoot) {
-    const state = (0, pack_manifest_1.requireObject)(value, '加工包状态');
-    if (state.packId !== packId) {
-        throw new Error('加工包状态的 packId 不匹配');
-    }
-    if (!Number.isInteger(state.revision) || Number(state.revision) < 1) {
-        throw new Error('加工包状态的 revision 无效');
-    }
-    if (state.status !== 'pending') {
-        throw new Error('当前加工包状态必须是 pending');
-    }
-    if (typeof state.packFile !== 'string' || !state.packFile) {
-        throw new Error('加工包状态的 packFile 无效');
-    }
-    const packFile = path.resolve(state.packFile);
-    const relativePackFile = path.relative(vaultRoot, packFile);
-    if (relativePackFile.startsWith('..') || path.isAbsolute(relativePackFile)) {
-        throw new Error('加工包状态的 packFile 超出知识库');
-    }
-    const sourceStem = path.basename(sourceFile, path.extname(sourceFile));
-    const expectedPackFile = path.join(vaultRoot, 'Inbox', `${sourceStem}-${packId.slice(0, 12)}-r${Number(state.revision)}.md`);
-    if (packFile !== expectedPackFile) {
-        throw new Error('加工包状态的 packFile 与 revision 不匹配');
-    }
-    if (typeof state.createdAt !== 'string' || !state.createdAt) {
-        throw new Error('加工包状态的 createdAt 无效');
-    }
-    const stateManifest = (0, pack_manifest_1.validateInitialManifest)(state.manifest, sourceFile);
-    return {
-        packId,
-        revision: Number(state.revision),
-        status: 'pending',
-        packFile,
-        createdAt: state.createdAt,
-        manifest: stateManifest,
-    };
-}
 function findVaultRoot(sourceFile) {
     const parsed = path.parse(sourceFile);
     const segments = sourceFile.slice(parsed.root.length).split(path.sep);
@@ -254,10 +225,4 @@ function findVaultRoot(sourceFile) {
         return path.dirname(sourceFile);
     }
     return path.join(parsed.root, ...segments.slice(0, l1Index));
-}
-function toWikiPath(vaultRoot, filePath) {
-    return path.relative(vaultRoot, filePath)
-        .replace(/\.md$/i, '')
-        .split(path.sep)
-        .join('/');
 }

@@ -37,6 +37,7 @@ exports.validateInitialManifest = validateInitialManifest;
 exports.validateQuotes = validateQuotes;
 exports.normalizeProcessingGoal = normalizeProcessingGoal;
 exports.computePackId = computePackId;
+exports.computeSourceId = computeSourceId;
 exports.canonicalJson = canonicalJson;
 exports.requireObject = requireObject;
 const crypto_1 = require("crypto");
@@ -127,6 +128,9 @@ function computePackId(sourceUrl, processingGoal) {
         .update(`${sourceUrl}\n${processingGoal ?? '__general__'}`)
         .digest('hex');
 }
+function computeSourceId(sourceUrl) {
+    return (0, crypto_1.createHash)('sha256').update(sourceUrl).digest('hex');
+}
 function canonicalJson(value) {
     if (Array.isArray(value)) {
         return `[${value.map(canonicalJson).join(',')}]`;
@@ -139,6 +143,9 @@ function canonicalJson(value) {
 }
 function validateAtomicNotes(value) {
     const notes = value;
+    if (notes.length > 99) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', 'atomicNotes 最多包含 99 项');
+    }
     const ids = new Set();
     for (const [index, entry] of notes.entries()) {
         const label = `atomicNotes[${index}]`;
@@ -164,6 +171,9 @@ function validateAtomicNotes(value) {
 }
 function validateMaterials(value) {
     const materials = value;
+    if (materials.length > 99) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', 'materials 最多包含 99 项');
+    }
     const ids = new Set();
     for (const [index, entry] of materials.entries()) {
         const label = `materials[${index}]`;
@@ -188,6 +198,9 @@ function validateMaterials(value) {
 }
 function validateReviewQuestions(value) {
     const questions = value;
+    if (questions.length > 99) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', 'reviewQuestions 最多包含 99 项');
+    }
     const ids = new Set();
     for (const [index, entry] of questions.entries()) {
         const label = `reviewQuestions[${index}]`;

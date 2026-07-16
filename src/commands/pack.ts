@@ -15,10 +15,15 @@ import {
   computePackId,
   InitialManifest,
   normalizeProcessingGoal,
-  requireObject,
   validateInitialManifest,
   validateQuotes,
 } from '../lib/pack-manifest';
+import {
+  PackState,
+  serializePackState,
+  validatePackState,
+} from '../lib/pack-state';
+import { packFilePath, toWikiPath } from '../lib/pack-paths';
 import {
   renderPack,
   setPackStatus,
@@ -26,21 +31,11 @@ import {
   withoutDerivedRegion,
 } from '../lib/pack-render';
 
-interface PackState {
-  packId: string;
-  revision: number;
-  status: 'pending' | 'superseded';
-  packFile: string;
-  createdAt: string;
-  supersededAt?: string;
-  manifest: InitialManifest;
-}
-
 export interface PackCreateResult {
   action: 'create' | 'reuse' | 'revise';
   packId: string;
   revision: number;
-  status: 'pending';
+  status: 'pending' | 'partial' | 'approved';
   sourceFile: string;
   sourceUrl: string;
   processingGoal: string | null;
@@ -122,11 +117,14 @@ async function createPackLocked(
   let existing: PackState | null = null;
   if (await fs.pathExists(stateFile)) {
     try {
-      existing = validateCurrentPackState(
+      existing = validatePackState(
         await fs.readJson(stateFile),
-        packId,
-        sourceFile,
-        vaultRoot
+        {
+          vaultRoot,
+          expectedPackId: packId,
+          expectedSourceFile: sourceFile,
+          allowedStatuses: ['pending', 'partial', 'approved'],
+        }
       );
     } catch (error) {
       throw new CommandError('PACK_ALREADY_EXISTS', getErrorMessage(error));
@@ -139,7 +137,9 @@ async function createPackLocked(
         action: 'reuse',
         packId,
         revision: existing.revision,
-        status: existing.status === 'superseded' ? 'pending' : existing.status,
+        status: existing.status === 'partial' || existing.status === 'approved'
+          ? existing.status
+          : 'pending',
         sourceFile,
         sourceUrl: manifest.sourceUrl,
         processingGoal,
@@ -150,11 +150,7 @@ async function createPackLocked(
   }
   const sourceWikiPath = toWikiPath(vaultRoot, sourceFile);
   const revision = existing ? existing.revision + 1 : 1;
-  const packFile = path.join(
-    vaultRoot,
-    'Inbox',
-    `${sourceStem}-${packId.slice(0, 12)}-r${revision}.md`
-  );
+  const packFile = packFilePath(vaultRoot, sourceFile, packId, revision);
   const packWikiPath = toWikiPath(vaultRoot, packFile);
   const createdAt = new Date().toISOString();
   const packContent = renderPack({
@@ -179,6 +175,8 @@ async function createPackLocked(
     packFile,
     createdAt,
     manifest,
+    approvedItems: [],
+    outputs: [],
   };
   const revisionStateFile = path.join(
     path.dirname(stateFile),
@@ -222,18 +220,18 @@ async function createPackLocked(
       });
       writes.push({
         target: previousRevisionFile,
-        content: serializeJson(superseded),
+        content: serializePackState(superseded),
       });
     }
     writes.push({ target: packFile, content: packContent, expectAbsent: true });
     writes.push({
       target: revisionStateFile,
-      content: serializeJson(state),
+      content: serializePackState(state),
       expectAbsent: true,
     });
     writes.push({
       target: stateFile,
-      content: serializeJson(state),
+      content: serializePackState(state),
       expectAbsent: !existing,
     });
     writes.push({ target: sourceFile, content: sourceWithLink });
@@ -258,58 +256,6 @@ async function createPackLocked(
   };
 }
 
-function serializeJson(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`;
-}
-
-function validateCurrentPackState(
-  value: unknown,
-  packId: string,
-  sourceFile: string,
-  vaultRoot: string
-): PackState {
-  const state = requireObject(value, '加工包状态');
-  if (state.packId !== packId) {
-    throw new Error('加工包状态的 packId 不匹配');
-  }
-  if (!Number.isInteger(state.revision) || Number(state.revision) < 1) {
-    throw new Error('加工包状态的 revision 无效');
-  }
-  if (state.status !== 'pending') {
-    throw new Error('当前加工包状态必须是 pending');
-  }
-  if (typeof state.packFile !== 'string' || !state.packFile) {
-    throw new Error('加工包状态的 packFile 无效');
-  }
-  const packFile = path.resolve(state.packFile);
-  const relativePackFile = path.relative(vaultRoot, packFile);
-  if (relativePackFile.startsWith('..') || path.isAbsolute(relativePackFile)) {
-    throw new Error('加工包状态的 packFile 超出知识库');
-  }
-  const sourceStem = path.basename(sourceFile, path.extname(sourceFile));
-  const expectedPackFile = path.join(
-    vaultRoot,
-    'Inbox',
-    `${sourceStem}-${packId.slice(0, 12)}-r${Number(state.revision)}.md`
-  );
-  if (packFile !== expectedPackFile) {
-    throw new Error('加工包状态的 packFile 与 revision 不匹配');
-  }
-  if (typeof state.createdAt !== 'string' || !state.createdAt) {
-    throw new Error('加工包状态的 createdAt 无效');
-  }
-  const stateManifest = validateInitialManifest(state.manifest, sourceFile);
-  return {
-    packId,
-    revision: Number(state.revision),
-    status: 'pending',
-    packFile,
-    createdAt: state.createdAt,
-    manifest: stateManifest,
-  };
-}
-
-
 function findVaultRoot(sourceFile: string): string {
   const parsed = path.parse(sourceFile);
   const segments = sourceFile.slice(parsed.root.length).split(path.sep);
@@ -318,11 +264,4 @@ function findVaultRoot(sourceFile: string): string {
     return path.dirname(sourceFile);
   }
   return path.join(parsed.root, ...segments.slice(0, l1Index));
-}
-
-function toWikiPath(vaultRoot: string, filePath: string): string {
-  return path.relative(vaultRoot, filePath)
-    .replace(/\.md$/i, '')
-    .split(path.sep)
-    .join('/');
 }

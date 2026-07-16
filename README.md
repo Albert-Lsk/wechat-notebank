@@ -179,6 +179,7 @@ $HOME\WeChatArticles
 | `alskai-notebank setup --agents <targets> [--dry-run] --json` | 安装或更新指定 Agent 集成 |
 | `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill 与配置 |
 | `alskai-notebank pack create --source <file> --manifest <manifest.json> --json` | 创建或修订待审核加工包 |
+| `alskai-notebank pack approve <pack> --items <ids> --json` | 选择性审批并发布 L2/L3 候选 |
 | `alskai-notebank <url>` | 保存单篇文章到默认路径 |
 | `alskai-notebank fetch <url>` | 保存单篇文章，和上面等价 |
 | `alskai-notebank <url> --output <folder>` | 保存到指定目录 |
@@ -219,6 +220,17 @@ Manifest v1 顶层字段固定为：
 ```
 
 命令会在 `Inbox` 创建可见的待审核 Markdown，在 `.alskai-notebank/packs` 保存机器状态，并在加工包与原文之间建立 Wiki 双链。相同来源、相同加工目标和相同 Manifest 重复执行不会改写文件；内容变化时创建新 revision，并保留旧 revision。
+
+审核候选时，把加工包路径和需要保留的稳定 ID 交给 CLI：
+
+```bash
+alskai-notebank pack approve \
+  ~/WeChatArticles/Inbox/待审核加工包.md \
+  --items L2-01,L3-02 \
+  --json
+```
+
+每个获批 L2 观点会生成一张独立原子卡片；同一篇来源在不同加工目标和 revision 中获批的 L3 引用、案例、数据与转述会合并到唯一一份素材包。部分审批返回 `partial`；全部 L2/L3 已审批且没有待回答的 L4 问题时返回 `approved`。重复审批相同 ID 不会重复生成文件或双链。
 
 ## 输出文件
 

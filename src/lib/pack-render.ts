@@ -4,6 +4,8 @@ import { CommandError } from './command-error';
 
 const DERIVED_START = '<!-- alskai-notebank:derived:start -->';
 const DERIVED_END = '<!-- alskai-notebank:derived:end -->';
+const PUBLISHED_START = '<!-- alskai-notebank:published:start -->';
+const PUBLISHED_END = '<!-- alskai-notebank:published:end -->';
 
 export function setPackStatus(content: string, supersededAt: string): string {
   const document = matter(content);
@@ -36,6 +38,28 @@ export function withoutDerivedRegion(sourceContent: string): string {
   return `${sourceContent.slice(0, region.start)}${sourceContent.slice(region.endAfter)}`;
 }
 
+export function updatePackPublication(
+  packContent: string,
+  status: 'partial' | 'approved',
+  approvedItems: string[],
+  links: string[],
+  updatedAt: string
+): string {
+  const document = matter(packContent);
+  const body = upsertManagedRegion(
+    document.content,
+    PUBLISHED_START,
+    PUBLISHED_END,
+    ['## 已发布内容', '', ...links].join('\n')
+  );
+  return matter.stringify(body, {
+    ...document.data,
+    status,
+    approvedItems,
+    updatedAt,
+  });
+}
+
 function findDerivedRegion(
   sourceContent: string
 ): { start: number; end: number; endAfter: number } | null {
@@ -53,6 +77,29 @@ function findDerivedRegion(
     throw new CommandError('MANIFEST_INVALID', '原文衍生内容受控区域顺序无效');
   }
   return { start, end, endAfter: end + DERIVED_END.length };
+}
+
+function upsertManagedRegion(
+  content: string,
+  startMarker: string,
+  endMarker: string,
+  body: string
+): string {
+  const startCount = content.split(startMarker).length - 1;
+  const endCount = content.split(endMarker).length - 1;
+  if (startCount === 0 && endCount === 0) {
+    const separator = content.endsWith('\n') ? '\n' : '\n\n';
+    return `${content}${separator}${startMarker}\n${body}\n${endMarker}\n`;
+  }
+  if (startCount !== 1 || endCount !== 1) {
+    throw new CommandError('MANIFEST_INVALID', '加工包已发布内容受控区域损坏');
+  }
+  const start = content.indexOf(startMarker);
+  const end = content.indexOf(endMarker);
+  if (end < start) {
+    throw new CommandError('MANIFEST_INVALID', '加工包已发布内容起止标记顺序错误');
+  }
+  return `${content.slice(0, start)}${startMarker}\n${body}\n${content.slice(end)}`;
 }
 
 export function renderPack(input: {
