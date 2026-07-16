@@ -7,6 +7,7 @@ exports.setPackStatus = setPackStatus;
 exports.upsertDerivedLink = upsertDerivedLink;
 exports.withoutDerivedRegion = withoutDerivedRegion;
 exports.updatePackPublication = updatePackPublication;
+exports.updatePackReview = updatePackReview;
 exports.renderPack = renderPack;
 const gray_matter_1 = __importDefault(require("gray-matter"));
 const command_error_1 = require("./command-error");
@@ -14,6 +15,8 @@ const DERIVED_START = '<!-- alskai-notebank:derived:start -->';
 const DERIVED_END = '<!-- alskai-notebank:derived:end -->';
 const PUBLISHED_START = '<!-- alskai-notebank:published:start -->';
 const PUBLISHED_END = '<!-- alskai-notebank:published:end -->';
+const REVIEW_START = '<!-- alskai-notebank:review:start -->';
+const REVIEW_END = '<!-- alskai-notebank:review:end -->';
 function setPackStatus(content, supersededAt) {
     const document = (0, gray_matter_1.default)(content);
     return gray_matter_1.default.stringify(document.content, {
@@ -49,6 +52,32 @@ function updatePackPublication(packContent, status, approvedItems, links, update
         ...document.data,
         status,
         approvedItems,
+        updatedAt,
+    });
+}
+function updatePackReview(packContent, manifest, updatedAt) {
+    const document = (0, gray_matter_1.default)(packContent);
+    const answers = manifest.reviewQuestions.flatMap((question) => {
+        const answer = manifest.reviewAnswers?.[question.id];
+        return answer === undefined
+            ? []
+            : [
+                `### ${question.id} · ${question.question}`,
+                '',
+                answer,
+                '',
+            ];
+    });
+    const body = upsertManagedRegion(document.content, REVIEW_START, REVIEW_END, [
+        '## 用户原始回答',
+        '',
+        ...(answers.length > 0 ? answers : ['暂无回答。', '']),
+        '## Agent 整理稿',
+        '',
+        manifest.reviewDraft || '尚未生成。',
+    ].join('\n'));
+    return gray_matter_1.default.stringify(body, {
+        ...document.data,
         updatedAt,
     });
 }

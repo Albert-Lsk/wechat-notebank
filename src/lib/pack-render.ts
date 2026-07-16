@@ -1,11 +1,13 @@
 import matter from 'gray-matter';
-import { InitialManifest } from './pack-manifest';
+import { InitialManifest, PackManifest } from './pack-manifest';
 import { CommandError } from './command-error';
 
 const DERIVED_START = '<!-- alskai-notebank:derived:start -->';
 const DERIVED_END = '<!-- alskai-notebank:derived:end -->';
 const PUBLISHED_START = '<!-- alskai-notebank:published:start -->';
 const PUBLISHED_END = '<!-- alskai-notebank:published:end -->';
+const REVIEW_START = '<!-- alskai-notebank:review:start -->';
+const REVIEW_END = '<!-- alskai-notebank:review:end -->';
 
 export function setPackStatus(content: string, supersededAt: string): string {
   const document = matter(content);
@@ -56,6 +58,42 @@ export function updatePackPublication(
     ...document.data,
     status,
     approvedItems,
+    updatedAt,
+  });
+}
+
+export function updatePackReview(
+  packContent: string,
+  manifest: PackManifest,
+  updatedAt: string
+): string {
+  const document = matter(packContent);
+  const answers = manifest.reviewQuestions.flatMap((question) => {
+    const answer = manifest.reviewAnswers?.[question.id];
+    return answer === undefined
+      ? []
+      : [
+        `### ${question.id} · ${question.question}`,
+        '',
+        answer,
+        '',
+      ];
+  });
+  const body = upsertManagedRegion(
+    document.content,
+    REVIEW_START,
+    REVIEW_END,
+    [
+      '## 用户原始回答',
+      '',
+      ...(answers.length > 0 ? answers : ['暂无回答。', '']),
+      '## Agent 整理稿',
+      '',
+      manifest.reviewDraft || '尚未生成。',
+    ].join('\n')
+  );
+  return matter.stringify(body, {
+    ...document.data,
     updatedAt,
   });
 }

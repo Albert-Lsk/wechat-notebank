@@ -7,6 +7,7 @@ import { setupCommand } from './commands/setup';
 import { doctorCommand } from './commands/doctor';
 import { createPackCommand } from './commands/pack';
 import { approvePackCommand } from './commands/pack-approve';
+import { updatePackCommand } from './commands/pack-update';
 import { configExists } from './lib/config';
 import {
   isJsonOutputRequested,
@@ -17,6 +18,7 @@ import {
   parseImportArgs,
   parsePackCreateArgs,
   parsePackApproveArgs,
+  parsePackUpdateArgs,
   parseSetupArgs,
 } from './lib/cli';
 import { writeJsonOutput } from './lib/command-output';
@@ -40,8 +42,10 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank doctor [--json]          只读诊断环境、CLI、Skill 与配置
   alskai-notebank pack create --source <file> --manifest <manifest.json> [--json]
                                           创建或修订待审核加工包
+  alskai-notebank pack update <pack> --manifest <manifest.json> [--json]
+                                          记录 L4 用户回答与 Agent 整理稿
   alskai-notebank pack approve <pack> --items <ids> [--json]
-                                          选择性发布 L2/L3 候选内容
+                                          选择性发布 L2/L3/L4 候选内容
   alskai-notebank <url> [--output <folder>] [--json]
                                           存档文章
   alskai-notebank import <Excel文件地址> [--json]
@@ -59,6 +63,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank setup --agents codex --dry-run --json
   alskai-notebank doctor --json
   alskai-notebank pack create --source ./原文.md --manifest ./manifest.json --json
+  alskai-notebank pack update ./Inbox/待审核加工包.md --manifest ./manifest.json --json
   alskai-notebank pack approve ./Inbox/待审核加工包.md --items L2-01,L3-02 --json
   alskai-notebank import ./articles.xlsx
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
@@ -200,7 +205,11 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   if (command === 'pack') {
     const jsonRequested = isJsonOutputRequested(args);
     const operation = args[0];
-    const commandName = operation === 'approve' ? 'pack.approve' : 'pack.create';
+    const commandName = operation === 'approve'
+      ? 'pack.approve'
+      : operation === 'update'
+        ? 'pack.update'
+        : 'pack.create';
     try {
       if (operation === 'approve') {
         const packArgs = parsePackApproveArgs(args);
@@ -214,6 +223,21 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
           });
         } else {
           console.log(`✅ 已发布加工包内容: ${result.publishedFiles.join(', ')}`);
+        }
+        return;
+      }
+      if (operation === 'update') {
+        const packArgs = parsePackUpdateArgs(args);
+        const result = await updatePackCommand(packArgs);
+        if (packArgs.json) {
+          writeJsonOutput({
+            ok: true,
+            command: 'pack.update',
+            status: result.action === 'reuse' ? 'unchanged' : 'updated',
+            result,
+          });
+        } else {
+          console.log(`✅ 加工包审核回答已更新: ${result.packFile}`);
         }
         return;
       }

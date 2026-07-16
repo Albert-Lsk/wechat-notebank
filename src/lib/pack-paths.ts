@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { computeSourceId } from './pack-manifest';
-import { FOLDER_L2, FOLDER_L3 } from './storage';
+import { FOLDER_L2, FOLDER_L3, FOLDER_L4 } from './storage';
 
 export function packFilePath(
   vaultRoot: string,
@@ -46,6 +46,27 @@ export function materialsStateFilePath(vaultRoot: string, sourceUrl: string): st
     vaultRoot,
     '.alskai-notebank',
     'materials',
+    `${computeSourceId(sourceUrl)}.json`
+  );
+}
+
+export function reflectionFilePath(
+  vaultRoot: string,
+  sourceFile: string,
+  sourceUrl: string
+): string {
+  return path.join(
+    vaultRoot,
+    FOLDER_L4,
+    `${sourceStem(sourceFile)}-${computeSourceId(sourceUrl).slice(0, 12)}.md`
+  );
+}
+
+export function reflectionStateFilePath(vaultRoot: string, sourceUrl: string): string {
+  return path.join(
+    vaultRoot,
+    '.alskai-notebank',
+    'reflections',
     `${computeSourceId(sourceUrl)}.json`
   );
 }

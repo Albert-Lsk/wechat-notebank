@@ -13,6 +13,7 @@ import {
 import {
   canonicalJson,
   computePackId,
+  initialManifestOf,
   InitialManifest,
   normalizeProcessingGoal,
   validateInitialManifest,
@@ -129,7 +130,7 @@ async function createPackLocked(
     } catch (error) {
       throw new CommandError('PACK_ALREADY_EXISTS', getErrorMessage(error));
     }
-    if (canonicalJson(existing.manifest) === canonicalJson(manifest)) {
+    if (canonicalJson(initialManifestOf(existing.manifest)) === canonicalJson(manifest)) {
       if (!(await fs.pathExists(existing.packFile))) {
         throw new CommandError('PACK_ALREADY_EXISTS', '加工包状态存在，但可见文件缺失');
       }

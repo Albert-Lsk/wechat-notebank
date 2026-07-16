@@ -2,13 +2,14 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import {
   computePackId,
-  InitialManifest,
-  validateInitialManifest,
+  PackManifest,
+  validatePackManifest,
 } from './pack-manifest';
 import {
   atomicNoteFilePath,
   materialsFilePath,
   packFilePath,
+  reflectionFilePath,
 } from './pack-paths';
 
 export type PackStatus =
@@ -20,7 +21,7 @@ export type PackStatus =
   | 'superseded';
 
 export interface PublishedOutput {
-  kind: 'L2' | 'L3';
+  kind: 'L2' | 'L3' | 'L4';
   itemIds: string[];
   file: string;
   sha256: string;
@@ -36,7 +37,7 @@ export interface PackState {
   createdAt: string;
   updatedAt?: string;
   supersededAt?: string;
-  manifest: InitialManifest;
+  manifest: PackManifest;
   approvedItems: string[];
   outputs: PublishedOutput[];
 }
@@ -77,7 +78,7 @@ export function validatePackState(
   ) {
     throw new Error('加工包原文路径与当前操作不一致');
   }
-  const manifest = validateInitialManifest(state.manifest, sourceFile);
+  const manifest = validatePackManifest(state.manifest, sourceFile);
   const expectedPackId = computePackId(manifest.sourceUrl, manifest.processingGoal);
   if (
     typeof state.packId !== 'string' ||
@@ -120,6 +121,7 @@ export function validatePackState(
   const candidateIds = [
     ...manifest.atomicNotes.map((item) => item.id),
     ...manifest.materials.map((item) => item.id),
+    ...manifest.reviewQuestions.map((item) => item.id),
   ];
   const approvedItems = validateApprovedItems(state.approvedItems, candidateIds);
   const outputs = validateOutputs(
@@ -131,17 +133,39 @@ export function validatePackState(
     revision,
     approvedItems
   );
+  const l4Output = outputs.find((output) => output.kind === 'L4');
+  const reviewQuestionIds = manifest.reviewQuestions.map((question) => question.id);
+  if (
+    l4Output &&
+    (
+      l4Output.itemIds.length !== reviewQuestionIds.length ||
+      l4Output.itemIds.some((item, index) => item !== reviewQuestionIds[index])
+    )
+  ) {
+    throw new Error('L4 输出必须包含当前 revision 的全部复盘问题');
+  }
+  if (
+    l4Output &&
+    (
+      !manifest.reviewAnswers ||
+      reviewQuestionIds.some(
+        (questionId) => manifest.reviewAnswers?.[questionId] === undefined
+      ) ||
+      !manifest.reviewDraft
+    )
+  ) {
+    throw new Error('L4 输出缺少完整用户原始回答或 Agent 整理稿');
+  }
   if (state.status === 'pending' && (approvedItems.length > 0 || outputs.length > 0)) {
     throw new Error('pending 加工包不能包含已发布内容');
   }
-  const allL2L3Approved = candidateIds.every((item) => approvedItems.includes(item));
-  if (state.status === 'approved' && !allL2L3Approved) {
-    throw new Error('approved 加工包仍有未审批的 L2/L3 候选');
+  const allCandidatesApproved = candidateIds.every((item) => approvedItems.includes(item));
+  if (state.status === 'approved' && !allCandidatesApproved) {
+    throw new Error('approved 加工包仍有未审批的候选');
   }
   if (
     state.status === 'partial' &&
-    allL2L3Approved &&
-    manifest.reviewQuestions.length === 0
+    allCandidatesApproved
   ) {
     throw new Error('没有待处理候选的加工包不能保持 partial');
   }
@@ -383,6 +407,9 @@ function validateOutputs(
   if (outputs.filter((output) => output.kind === 'L3').length > 1) {
     throw new Error('同一加工包只能有一个 L3 输出');
   }
+  if (outputs.filter((output) => output.kind === 'L4').length > 1) {
+    throw new Error('同一加工包只能有一个 L4 输出');
+  }
   return outputs;
 }
 
@@ -408,7 +435,7 @@ function validateOutput(
   if (unknownFields.length > 0) {
     throw new Error(`outputs[${index}] 包含未知字段: ${unknownFields.join(', ')}`);
   }
-  if (output.kind !== 'L2' && output.kind !== 'L3') {
+  if (output.kind !== 'L2' && output.kind !== 'L3' && output.kind !== 'L4') {
     throw new Error(`outputs[${index}].kind 无效`);
   }
   if (
@@ -425,13 +452,18 @@ function validateOutput(
   if (output.kind === 'L3' && itemIds.some((item) => !/^L3-\d{2}$/.test(item))) {
     throw new Error(`outputs[${index}] 的 L3 itemIds 无效`);
   }
+  if (output.kind === 'L4' && itemIds.some((item) => !/^L4-Q\d{2}$/.test(item))) {
+    throw new Error(`outputs[${index}] 的 L4 itemIds 无效`);
+  }
   if (typeof output.file !== 'string' || !output.file) {
     throw new Error(`outputs[${index}].file 无效`);
   }
   const file = path.resolve(output.file);
   const expectedFile = output.kind === 'L2'
     ? atomicNoteFilePath(vaultRoot, sourceFile, packId, revision, itemIds[0])
-    : materialsFilePath(vaultRoot, sourceFile, sourceUrl);
+    : output.kind === 'L3'
+      ? materialsFilePath(vaultRoot, sourceFile, sourceUrl)
+      : reflectionFilePath(vaultRoot, sourceFile, sourceUrl);
   if (file !== expectedFile) {
     throw new Error(`outputs[${index}].file 与输出类型不匹配`);
   }

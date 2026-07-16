@@ -108,7 +108,7 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
         catch (error) {
             throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', (0, command_error_1.getErrorMessage)(error));
         }
-        if ((0, pack_manifest_1.canonicalJson)(existing.manifest) === (0, pack_manifest_1.canonicalJson)(manifest)) {
+        if ((0, pack_manifest_1.canonicalJson)((0, pack_manifest_1.initialManifestOf)(existing.manifest)) === (0, pack_manifest_1.canonicalJson)(manifest)) {
             if (!(await fs.pathExists(existing.packFile))) {
                 throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', '加工包状态存在，但可见文件缺失');
             }

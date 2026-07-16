@@ -12,6 +12,11 @@ export interface InitialManifest {
   reviewQuestions: ReviewQuestion[];
 }
 
+export interface PackManifest extends InitialManifest {
+  reviewAnswers?: Record<string, string>;
+  reviewDraft?: string;
+}
+
 export interface AtomicNote {
   id: string;
   title: string;
@@ -38,6 +43,33 @@ export function validateInitialManifest(
   value: unknown,
   sourceFile: string
 ): InitialManifest {
+  return validateManifest(value, sourceFile, false);
+}
+
+export function validatePackManifest(
+  value: unknown,
+  sourceFile: string
+): PackManifest {
+  return validateManifest(value, sourceFile, true);
+}
+
+export function initialManifestOf(manifest: PackManifest): InitialManifest {
+  return {
+    schemaVersion: manifest.schemaVersion,
+    sourceFile: manifest.sourceFile,
+    sourceUrl: manifest.sourceUrl,
+    processingGoal: manifest.processingGoal,
+    atomicNotes: manifest.atomicNotes,
+    materials: manifest.materials,
+    reviewQuestions: manifest.reviewQuestions,
+  };
+}
+
+function validateManifest(
+  value: unknown,
+  sourceFile: string,
+  allowReviewContent: boolean
+): PackManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new CommandError('MANIFEST_INVALID', 'Manifest 必须是 JSON 对象');
   }
@@ -50,6 +82,7 @@ export function validateInitialManifest(
     'atomicNotes',
     'materials',
     'reviewQuestions',
+    ...(allowReviewContent ? ['reviewAnswers', 'reviewDraft'] : []),
   ]);
   const unknownFields = Object.keys(manifest).filter(
     (field) => !allowedFields.has(field)
@@ -83,6 +116,12 @@ export function validateInitialManifest(
   const atomicNotes = manifest.atomicNotes as AtomicNote[];
   const materials = manifest.materials as Material[];
   const reviewQuestions = manifest.reviewQuestions as ReviewQuestion[];
+  const reviewAnswers = allowReviewContent
+    ? validateReviewAnswers(manifest.reviewAnswers, reviewQuestions)
+    : undefined;
+  const reviewDraft = allowReviewContent
+    ? validateReviewDraft(manifest.reviewDraft, reviewAnswers)
+    : undefined;
   return {
     schemaVersion: 1,
     sourceFile,
@@ -107,6 +146,8 @@ export function validateInitialManifest(
       id: question.id,
       question: question.question,
     })),
+    ...(reviewAnswers ? { reviewAnswers } : {}),
+    ...(reviewDraft ? { reviewDraft } : {}),
   };
 }
 
@@ -239,6 +280,50 @@ function validateReviewQuestions(value: unknown): void {
     ids.add(id);
     requireString(question.question, `${label}.question`);
   }
+}
+
+function validateReviewAnswers(
+  value: unknown,
+  questions: ReviewQuestion[]
+): Record<string, string> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const answers = requireObject(value, 'reviewAnswers');
+  const questionIds = new Set(questions.map((question) => question.id));
+  const answerIds = Object.keys(answers);
+  if (answerIds.length === 0) {
+    throw new CommandError('MANIFEST_INVALID', 'reviewAnswers 至少需要一条用户回答');
+  }
+  const unknownIds = answerIds.filter((id) => !questionIds.has(id));
+  if (unknownIds.length > 0) {
+    throw new CommandError(
+      'MANIFEST_INVALID',
+      `reviewAnswers 包含未知问题: ${unknownIds.join(', ')}`
+    );
+  }
+  for (const id of answerIds) {
+    requireString(answers[id], `reviewAnswers.${id}`);
+  }
+  return Object.fromEntries(
+    questions
+      .filter((question) => Object.prototype.hasOwnProperty.call(answers, question.id))
+      .map((question) => [question.id, answers[question.id] as string])
+  );
+}
+
+function validateReviewDraft(
+  value: unknown,
+  answers: Record<string, string> | undefined
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!answers) {
+    throw new CommandError('MANIFEST_INVALID', 'reviewDraft 必须建立在用户原始回答上');
+  }
+  requireString(value, 'reviewDraft');
+  return value as string;
 }
 
 export function requireObject(value: unknown, label: string): Record<string, unknown> {

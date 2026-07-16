@@ -34,6 +34,8 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validateInitialManifest = validateInitialManifest;
+exports.validatePackManifest = validatePackManifest;
+exports.initialManifestOf = initialManifestOf;
 exports.validateQuotes = validateQuotes;
 exports.normalizeProcessingGoal = normalizeProcessingGoal;
 exports.computePackId = computePackId;
@@ -44,6 +46,23 @@ const crypto_1 = require("crypto");
 const path = __importStar(require("path"));
 const command_error_1 = require("./command-error");
 function validateInitialManifest(value, sourceFile) {
+    return validateManifest(value, sourceFile, false);
+}
+function validatePackManifest(value, sourceFile) {
+    return validateManifest(value, sourceFile, true);
+}
+function initialManifestOf(manifest) {
+    return {
+        schemaVersion: manifest.schemaVersion,
+        sourceFile: manifest.sourceFile,
+        sourceUrl: manifest.sourceUrl,
+        processingGoal: manifest.processingGoal,
+        atomicNotes: manifest.atomicNotes,
+        materials: manifest.materials,
+        reviewQuestions: manifest.reviewQuestions,
+    };
+}
+function validateManifest(value, sourceFile, allowReviewContent) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new command_error_1.CommandError('MANIFEST_INVALID', 'Manifest 必须是 JSON 对象');
     }
@@ -56,6 +75,7 @@ function validateInitialManifest(value, sourceFile) {
         'atomicNotes',
         'materials',
         'reviewQuestions',
+        ...(allowReviewContent ? ['reviewAnswers', 'reviewDraft'] : []),
     ]);
     const unknownFields = Object.keys(manifest).filter((field) => !allowedFields.has(field));
     if (unknownFields.length > 0) {
@@ -84,6 +104,12 @@ function validateInitialManifest(value, sourceFile) {
     const atomicNotes = manifest.atomicNotes;
     const materials = manifest.materials;
     const reviewQuestions = manifest.reviewQuestions;
+    const reviewAnswers = allowReviewContent
+        ? validateReviewAnswers(manifest.reviewAnswers, reviewQuestions)
+        : undefined;
+    const reviewDraft = allowReviewContent
+        ? validateReviewDraft(manifest.reviewDraft, reviewAnswers)
+        : undefined;
     return {
         schemaVersion: 1,
         sourceFile,
@@ -108,6 +134,8 @@ function validateInitialManifest(value, sourceFile) {
             id: question.id,
             question: question.question,
         })),
+        ...(reviewAnswers ? { reviewAnswers } : {}),
+        ...(reviewDraft ? { reviewDraft } : {}),
     };
 }
 function validateQuotes(materials, sourceBody) {
@@ -217,6 +245,37 @@ function validateReviewQuestions(value) {
         ids.add(id);
         requireString(question.question, `${label}.question`);
     }
+}
+function validateReviewAnswers(value, questions) {
+    if (value === undefined) {
+        return undefined;
+    }
+    const answers = requireObject(value, 'reviewAnswers');
+    const questionIds = new Set(questions.map((question) => question.id));
+    const answerIds = Object.keys(answers);
+    if (answerIds.length === 0) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', 'reviewAnswers 至少需要一条用户回答');
+    }
+    const unknownIds = answerIds.filter((id) => !questionIds.has(id));
+    if (unknownIds.length > 0) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', `reviewAnswers 包含未知问题: ${unknownIds.join(', ')}`);
+    }
+    for (const id of answerIds) {
+        requireString(answers[id], `reviewAnswers.${id}`);
+    }
+    return Object.fromEntries(questions
+        .filter((question) => Object.prototype.hasOwnProperty.call(answers, question.id))
+        .map((question) => [question.id, answers[question.id]]));
+}
+function validateReviewDraft(value, answers) {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (!answers) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', 'reviewDraft 必须建立在用户原始回答上');
+    }
+    requireString(value, 'reviewDraft');
+    return value;
 }
 function requireObject(value, label) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {

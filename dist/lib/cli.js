@@ -6,6 +6,7 @@ exports.parseSetupArgs = parseSetupArgs;
 exports.parseDoctorArgs = parseDoctorArgs;
 exports.parsePackCreateArgs = parsePackCreateArgs;
 exports.parsePackApproveArgs = parsePackApproveArgs;
+exports.parsePackUpdateArgs = parsePackUpdateArgs;
 exports.parseInitArgs = parseInitArgs;
 exports.isJsonOutputRequested = isJsonOutputRequested;
 exports.parseImportArgs = parseImportArgs;
@@ -169,6 +170,41 @@ function parsePackApproveArgs(args) {
         throw new Error('请提供 --items <ids>');
     }
     return { packFile, items, json };
+}
+function parsePackUpdateArgs(args) {
+    const [operation, packFile, ...options] = args;
+    if (operation !== 'update') {
+        throw new Error('pack requires update');
+    }
+    if (!packFile || packFile.startsWith('--')) {
+        throw new Error('请提供待审核加工包路径');
+    }
+    let manifestFile;
+    let json = false;
+    for (let index = 0; index < options.length; index++) {
+        const option = options[index];
+        if (isJsonOutputOption(option)) {
+            json = true;
+            continue;
+        }
+        if (option === '--manifest') {
+            const value = options[index + 1];
+            if (!value || value.startsWith('--')) {
+                throw new Error('--manifest requires a file path');
+            }
+            if (manifestFile) {
+                throw new Error('--manifest 不能重复提供');
+            }
+            manifestFile = value;
+            index++;
+            continue;
+        }
+        throw new Error(`Unknown pack update option: ${option}`);
+    }
+    if (!manifestFile) {
+        throw new Error('请提供 --manifest <file>');
+    }
+    return { packFile, manifestFile, json };
 }
 function parseInitArgs(args) {
     if (args.length === 0) {

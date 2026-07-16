@@ -37,6 +37,8 @@ exports.packFilePath = packFilePath;
 exports.atomicNoteFilePath = atomicNoteFilePath;
 exports.materialsFilePath = materialsFilePath;
 exports.materialsStateFilePath = materialsStateFilePath;
+exports.reflectionFilePath = reflectionFilePath;
+exports.reflectionStateFilePath = reflectionStateFilePath;
 exports.toWikiPath = toWikiPath;
 const path = __importStar(require("path"));
 const pack_manifest_1 = require("./pack-manifest");
@@ -52,6 +54,12 @@ function materialsFilePath(vaultRoot, sourceFile, sourceUrl) {
 }
 function materialsStateFilePath(vaultRoot, sourceUrl) {
     return path.join(vaultRoot, '.alskai-notebank', 'materials', `${(0, pack_manifest_1.computeSourceId)(sourceUrl)}.json`);
+}
+function reflectionFilePath(vaultRoot, sourceFile, sourceUrl) {
+    return path.join(vaultRoot, storage_1.FOLDER_L4, `${sourceStem(sourceFile)}-${(0, pack_manifest_1.computeSourceId)(sourceUrl).slice(0, 12)}.md`);
+}
+function reflectionStateFilePath(vaultRoot, sourceUrl) {
+    return path.join(vaultRoot, '.alskai-notebank', 'reflections', `${(0, pack_manifest_1.computeSourceId)(sourceUrl)}.json`);
 }
 function toWikiPath(vaultRoot, filePath) {
     return path.relative(vaultRoot, filePath)

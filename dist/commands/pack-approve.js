@@ -47,6 +47,7 @@ const pack_paths_1 = require("../lib/pack-paths");
 const pack_state_1 = require("../lib/pack-state");
 const pack_render_1 = require("../lib/pack-render");
 const shared_materials_1 = require("../lib/shared-materials");
+const shared_reflections_1 = require("../lib/shared-reflections");
 const storage_1 = require("../lib/storage");
 async function approvePackCommand(args, transactionHooks = {}) {
     const packFile = path.resolve(args.packFile);
@@ -67,6 +68,7 @@ async function approvePackLocked(located, requestedItems, transactionHooks) {
             throw new command_error_1.CommandError('MANIFEST_INVALID', `加工包中不存在可审批候选: ${item}`);
         }
     }
+    assertL4ApprovalReady(requestedItems, state);
     const approvedSet = new Set([...state.approvedItems, ...requestedItems]);
     const approvedItems = candidates.filter((item) => approvedSet.has(item));
     if (requestedItems.every((item) => state.approvedItems.includes(item))) {
@@ -113,9 +115,19 @@ async function approvePackLocked(located, requestedItems, transactionHooks) {
             now,
         });
     }
+    if (addsNewL4(requestedItems, state)) {
+        const plan = await (0, shared_reflections_1.planSharedReflectionPublication)({
+            state,
+            vaultRoot,
+            sourceTitle,
+            sourceWikiPath,
+            now,
+        });
+        writes.push(...plan.writes);
+        outputs.push(plan.output);
+    }
     sortOutputs(outputs, candidates);
-    const status = candidates.every((item) => approvedSet.has(item)) &&
-        state.manifest.reviewQuestions.length === 0
+    const status = candidates.every((item) => approvedSet.has(item))
         ? 'approved'
         : 'partial';
     const publicationLinks = (0, pack_publication_1.renderPublicationLinks)(vaultRoot, outputs, state);
@@ -153,7 +165,7 @@ async function approvePackLocked(located, requestedItems, transactionHooks) {
         content: (0, pack_state_1.serializePackState)(nextState),
         expectedContent: previousStateContent,
     });
-    await commitApproval(vaultRoot, writes, transactionHooks, new Set(outputs.filter((output) => output.kind === 'L3').map((output) => output.file)));
+    await commitApproval(vaultRoot, writes, transactionHooks, new Set(outputs.filter((output) => output.kind !== 'L2').map((output) => output.file)));
     return approvalResult('publish', nextState, stateFile);
 }
 async function loadApprovalDocuments(state) {
@@ -238,10 +250,30 @@ function candidateIds(state) {
     return [
         ...state.manifest.atomicNotes.map((item) => item.id),
         ...state.manifest.materials.map((item) => item.id),
+        ...state.manifest.reviewQuestions.map((item) => item.id),
     ];
 }
 function addsNewL3(requestedItems, state) {
     return requestedItems.some((item) => item.startsWith('L3-') && !state.approvedItems.includes(item));
+}
+function addsNewL4(requestedItems, state) {
+    return requestedItems.some((item) => item.startsWith('L4-Q') && !state.approvedItems.includes(item));
+}
+function assertL4ApprovalReady(requestedItems, state) {
+    const requestedL4 = requestedItems.filter((item) => item.startsWith('L4-Q'));
+    if (requestedL4.length === 0) {
+        return;
+    }
+    const questionIds = state.manifest.reviewQuestions.map((question) => question.id);
+    if (questionIds.some((questionId) => !state.approvedItems.includes(questionId) && !requestedL4.includes(questionId))) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', 'L4 必须一次审批当前加工包的全部复盘问题');
+    }
+    const answers = state.manifest.reviewAnswers;
+    if (!answers ||
+        questionIds.some((questionId) => answers[questionId] === undefined) ||
+        !state.manifest.reviewDraft) {
+        throw new command_error_1.CommandError('MANIFEST_INVALID', 'L4 发布需要所有问题的用户原始回答与 Agent 整理稿');
+    }
 }
 function sortOutputs(outputs, candidates) {
     const order = new Map(candidates.map((item, index) => [item, index]));
