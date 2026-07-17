@@ -75,7 +75,7 @@ The `EXIT` trap removes the temporary export after the import command finishes o
 Apply this priority after reporting the archive result:
 
 1. If the user explicitly says “only save,” stop regardless of `result.autoProcess`.
-2. If the user explicitly requests saving and processing, hand each successfully saved file to the separate processing route. Use a processing goal stated in the current request; only when the request omits one, fall back to `result.processingGoal`.
-3. Otherwise, stop when `result.autoProcess` is `false`; when it is `true`, use the same processing handoff.
+2. If the user explicitly requests saving and processing, hand each `saved` result or idempotent `skipped` result with `SOURCE_URL_EXISTS` to the separate processing route. Use a processing goal stated in the current request; only when the request omits one, fall back to `result.processingGoal`.
+3. Otherwise, stop when `result.autoProcess` is `false`; when it is `true`, hand off only results with status `saved`.
 
-For workbook results, `autoProcess` and `processingGoal` are fields of `result`, and only `result.items` with status `saved` are eligible for the handoff. For multiple direct URLs, apply the decision to each result. Do not implement processing or load review instructions in this archive reference.
+For workbook results, `autoProcess` and `processingGoal` are fields of `result`. A `skipped` item with `SOURCE_URL_EXISTS` is eligible only for an explicit save-and-process request; for an `autoProcess` handoff, only status `saved` is eligible. For multiple direct URLs, apply the same decision to each result. Do not implement processing or load review instructions in this archive reference.

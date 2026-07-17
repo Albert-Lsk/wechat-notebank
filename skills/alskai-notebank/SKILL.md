@@ -1,6 +1,6 @@
 ---
 name: alskai-notebank
-description: Use when the user wants to install, update, diagnose, or repair alskai-notebank; save, archive, export, or migrate WeChat public account (微信公众号) articles; convert them to Markdown; or batch import URLs from Excel or Numbers.
+description: Use when the user wants to install, update, diagnose, or repair alskai-notebank; save, archive, export, migrate, or process WeChat public account (微信公众号) articles; convert them to Markdown; batch import URLs from Excel or Numbers; turn saved articles into reviewable knowledge candidates; or review, approve, reject, and revoke generated knowledge assets.
 ---
 
 # alskai-notebank
@@ -11,7 +11,8 @@ The Agent is the product interface. The CLI owns deterministic storage, configur
 
 - Installation, update, environment diagnosis, or Agent integration repair: **read and follow [Setup and doctor](references/setup.md)**.
 - Archive requests for one or multiple URLs, including Excel or Numbers workbooks: **read and follow [Archive and batch import](references/archive.md)**.
-- Content generation and publishing are separate routes. Do not load archive instructions for them.
+- Requests to process a saved article or an archive result into reviewable candidates: **read and follow [Content processing](references/processing.md)**.
+- Requests to inspect a pending pack, answer L4 questions, approve or reject candidates, or revoke published assets: **read and follow [Review and publishing](references/review.md)**.
 - Reading, summarizing, translating, formatting, or analyzing an article without a save/archive request: do not use this skill.
 
 ## Public boundaries

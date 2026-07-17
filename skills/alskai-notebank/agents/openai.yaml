@@ -1,4 +1,4 @@
 interface:
-  display_name: "ALSKai 公众号文章归档"
-  short_description: "把公众号文章保存为本地 Markdown，沉淀到 Obsidian 等个人知识库。"
+  display_name: "ALSKai 公众号知识加工"
+  short_description: "归档、加工并审核公众号文章，沉淀为可追溯的本地知识资产。"
   default_prompt: "Use $alskai-notebank to archive this WeChat article as local Markdown in my knowledge base."
