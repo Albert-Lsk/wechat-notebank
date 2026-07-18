@@ -2,8 +2,10 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createPackCommand } = require('../dist/commands/pack');
-const { approvePackCommand } = require('../dist/commands/pack-approve');
+const runtimeRoot = process.env.WECHAT_NOTEBANK_RUNTIME_ROOT
+  || path.join(__dirname, '..', 'dist');
+const { createPackCommand } = require(path.join(runtimeRoot, 'commands', 'pack'));
+const { approvePackCommand } = require(path.join(runtimeRoot, 'commands', 'pack-approve'));
 
 function snapshot(root) {
   const entries = [];

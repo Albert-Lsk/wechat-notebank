@@ -7,6 +7,8 @@ description: Use when the user wants to install, update, diagnose, or repair als
 
 The Agent is the product interface. The CLI owns deterministic storage, configuration, deduplication, and machine-readable results.
 
+Resolve the CLI once before loading a route: use `command -v alskai-notebank` when it succeeds; otherwise use `$HOME/.local/bin/alskai-notebank` when that file is executable. Use this resolved CLI path for every command in the loaded reference. If neither path is available, load the setup route.
+
 ## Route by intent
 
 - Installation, update, environment diagnosis, or Agent integration repair: **read and follow [Setup and doctor](references/setup.md)**.

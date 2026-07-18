@@ -5,10 +5,19 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
-const cliPath = path.join(projectRoot, 'dist', 'index.js');
+const cliPath = process.env.WECHAT_NOTEBANK_CLI_PATH
+  || path.join(projectRoot, 'dist', 'index.js');
 const mockPuppeteerPath = path.join(__dirname, 'helpers', 'mock-puppeteer.js');
 const articleFixturePath = path.join(__dirname, 'fixtures', 'wechat-article.html');
-const skillRoot = path.join(projectRoot, 'skills', 'alskai-notebank');
+const skillRoot = process.env.WECHAT_NOTEBANK_SKILL_ROOT
+  || path.join(projectRoot, 'skills', 'alskai-notebank');
+if (process.env.WECHAT_NOTEBANK_EXPECT_SKILL_ROOT) {
+  assert.strictEqual(
+    skillRoot,
+    process.env.WECHAT_NOTEBANK_EXPECT_SKILL_ROOT,
+    'agent workflow must read the installed release Skill'
+  );
+}
 const skillEntry = fs.readFileSync(path.join(skillRoot, 'SKILL.md'), 'utf8');
 const archiveReference = fs.readFileSync(
   path.join(skillRoot, 'references', 'archive.md'),
@@ -67,6 +76,13 @@ function parseSuccess(result) {
   assert.strictEqual(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
   assert.strictEqual(output.ok, true);
+  return output;
+}
+
+function parseFailure(result) {
+  assert.strictEqual(result.status, 1, result.stderr || result.stdout);
+  const output = JSON.parse(result.stdout);
+  assert.strictEqual(output.ok, false);
   return output;
 }
 
@@ -255,6 +271,25 @@ const l4File = l4Approval.result.publishedFiles.find(
 assert.ok(l4File);
 assert.match(fs.readFileSync(l4File, 'utf8'), /我确认自动加工只应生成候选/);
 assert.match(fs.readFileSync(l4File, 'utf8'), /Agent 整理稿/);
+
+const l2BeforeHumanEdit = fs.readFileSync(l2File, 'utf8');
+const l2WithHumanEdit = `${l2BeforeHumanEdit}\n用户人工补充的内容。\n`;
+fs.writeFileSync(l2File, l2WithHumanEdit);
+const refusedRevoke = parseFailure(runCli([
+  'pack',
+  'revoke',
+  created.result.packFile,
+  '--items',
+  'L2-01',
+  '--json',
+], autoHome));
+assert.strictEqual(refusedRevoke.error.code, 'DERIVED_FILE_MODIFIED');
+assert.strictEqual(fs.readFileSync(l2File, 'utf8'), l2WithHumanEdit);
+assert.deepStrictEqual(
+  JSON.parse(fs.readFileSync(created.result.stateFile, 'utf8')).approvedItems,
+  ['L2-01', 'L4-Q01', 'L4-Q02']
+);
+fs.writeFileSync(l2File, l2BeforeHumanEdit);
 
 const revoked = parseSuccess(runCli([
   'pack',

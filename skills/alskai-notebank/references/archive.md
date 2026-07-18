@@ -4,7 +4,7 @@ Load this reference only when the user wants to save, archive, back up, download
 
 ## Boundary
 
-Use the installed `alskai-notebank` CLI. Do not inspect configuration files or archive folders to resolve paths or duplicates; the CLI owns those facts. If `command -v alskai-notebank` fails, stop and route to installation instead of running repository internals.
+Use the resolved CLI selected by the entry Skill. Do not inspect configuration files or archive folders to resolve paths or duplicates; the CLI owns those facts. If no resolved CLI is available, stop and route to installation instead of running repository internals.
 
 Always request JSON so Agent behavior does not depend on human-readable logs.
 

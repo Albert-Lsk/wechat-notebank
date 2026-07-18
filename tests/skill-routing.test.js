@@ -33,6 +33,8 @@ assert.match(entry, /references\/review\.md/);
 assert.match(entry, /(install|update|diagnos|安装|更新|诊断)/i);
 assert.match(entry, /Agent[^\n]*(interface|操作界面)/i);
 assert.match(entry, /CLI[^\n]*(deterministic|确定性)/i);
+assert.match(entry, /command -v alskai-notebank/);
+assert.match(entry, /\$HOME\/\.local\/bin\/alskai-notebank/);
 assert.doesNotMatch(entry, /alskai-notebank (setup|doctor|fetch|import)/);
 
 assert.ok(fs.existsSync(setupReferencePath));
@@ -47,6 +49,8 @@ assert.doesNotMatch(setupReference, /refs\/heads\/main|\bsudo\b/i);
 assert.ok(fs.existsSync(archiveReferencePath));
 const archiveReference = fs.readFileSync(archiveReferencePath, 'utf8');
 assert.match(archiveReference, /alskai-notebank fetch [^\n]*--json/);
+assert.match(archiveReference, /resolved CLI/i);
+assert.doesNotMatch(archiveReference, /command -v alskai-notebank` fails[^\n]*stop/i);
 assert.match(archiveReference, /alskai-notebank import [^\n]*--json/);
 assert.match(archiveReference, /(multiple|多个)[^\n]*(URL|链接)/i);
 assert.match(archiveReference, /result\.savedFile/);

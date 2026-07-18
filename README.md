@@ -11,13 +11,13 @@ Archive WeChat Official Account articles as local Markdown for Obsidian, Logseq,
 
 `wechat-notebank` 是一个本地命令行工具，用 Chrome 打开微信公众号文章，提取文章内容，然后保存为带 Frontmatter 的 Markdown 文件。
 
-抓取、解析和写入都在本机完成，工具不会上传你的知识库。它不需要接入大模型，也不需要 OpenAI / Claude / Gemini API key。当前核心流程是：
+抓取、解析和写入都在本机完成，工具不会上传你的知识库。保存原文不依赖大模型，也不需要 OpenAI / Claude / Gemini API key。当前核心流程是：
 
 ```text
 微信公众号文章链接 -> 本机 Chrome 打开页面 -> 解析 HTML -> 保存 Markdown
 ```
 
-大模型只会在以后做“摘要、标签、自动提炼”这类增强功能时才可能需要。保存原文这件事本身不依赖大模型。
+可选的内容加工由用户当前使用的 Codex、Claude Code 等 Agent 完成，不需要为 `wechat-notebank` 额外配置模型 API key。所有候选内容都会先进入待审核加工包，只有用户明确批准后才发布到正式知识库。
 
 最短用法：
 
@@ -53,7 +53,7 @@ alskai-notebank "https://mp.weixin.qq.com/s/xxxxx" -o ~/WeChatArticles
 - 自动按文章真实发布日期命名
 - 自动写入标题、作者、公众号、发布时间、原文链接等元数据
 - 输出 Markdown + Frontmatter，适合 Obsidian 等知识库
-- 不依赖大模型，不需要 API key
+- 保存原文不依赖大模型；内容加工复用当前 Agent，不需要额外 API key
 - Windows / macOS / Linux 都可用，前提是本机能运行 Node.js 和 Chrome
 
 ## 环境要求
@@ -90,15 +90,26 @@ export WECHAT_NOTEBANK_CHROME_PATH="/Applications/Google Chrome.app/Contents/Mac
 安装固定的 GitHub Release 标签，避免使用持续变化的开发分支：
 
 ```bash
-npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/tags/v0.2.0.tar.gz --force
+npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
+ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 ```
 
-安装或更新 Agent 集成时，必须明确目标。可以先预演，再正式执行：
+Release 同时提供 SHA-256 文件。需要在安装前校验时，先下载两个资产：
 
 ```bash
-alskai-notebank setup --agents codex,claude --dry-run --json
-alskai-notebank setup --agents codex,claude --json
-alskai-notebank doctor --json
+curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz
+curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz.sha256
+shasum -a 256 -c wechat-notebank-0.2.0.tgz.sha256
+npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.2.0.tgz --force
+ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
+```
+
+`~/.local` 是当前用户可写目录，因此不需要 `sudo`，也不用修改 shell 配置。安装或更新 Agent 集成时，必须明确目标。可以先预演，再正式执行：
+
+```bash
+"$ALSKAI_NOTEBANK" setup --agents codex,claude --dry-run --json
+"$ALSKAI_NOTEBANK" setup --agents codex,claude --json
+"$ALSKAI_NOTEBANK" doctor --json
 ```
 
 只使用 Codex 时传 `codex`，只使用 Claude Code 时传 `claude`。`setup` 会安装当前包附带的 Skill；Claude Code 还会安装 `/alskai-notebank` 命令。已有文件更新前会备份，失败时会恢复，重复执行不会重复改写相同版本。成功后请重启 Codex 或 Claude Code，让当前会话重新发现 Skill。
@@ -106,14 +117,14 @@ alskai-notebank doctor --json
 你也可以把下面这段原样发给具备终端权限的 Agent：
 
 ```text
-请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.2.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
+请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.2.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
 ```
 
-安装后推荐使用 `alskai-notebank` 命令。`wechat-notebank` 是兼容旧用法的命令别名，两者调用的是同一个工具。
+安装后推荐使用 `alskai-notebank` 命令。`wechat-notebank` 是兼容旧用法的命令别名，两者调用的是同一个工具。下面继续使用绝对路径，因此即使没有修改 PATH 也能运行：
 
 ```bash
-alskai-notebank --help
-wechat-notebank --help
+"$ALSKAI_NOTEBANK" --help
+"$HOME/.local/bin/wechat-notebank" --help
 ```
 
 `wechat-notebank` 暂未发布到 npm registry。如果你运行下面命令遇到 `404 Not Found`，说明 npm 包还没发布：
@@ -121,6 +132,13 @@ wechat-notebank --help
 ```bash
 npm install -g wechat-notebank
 ```
+
+### v0.2.0 首版边界
+
+- Agent 自助安装、`setup` 和 `doctor` 只支持 macOS Apple Silicon。
+- 运行前需要用户自行安装 Node.js 20+、npm 和 Google Chrome；工具不会安装系统依赖，不使用 `sudo`，也不修改 shell 配置。
+- 首版只通过固定 GitHub Release 资产安装，不发布 npm registry 包，也不提供自动更新服务。
+- 首版不提供独立 macOS 程序；具备 Apple Developer Program、Developer ID 签名和公证流程后，再另立规格开发独立程序。
 
 ## 快速开始
 
@@ -418,9 +436,9 @@ wechat-notebank fetch <url>
 
 ### 需要接入大模型吗？
 
-不需要。保存原文只依赖本机 Chrome、Puppeteer 和 HTML 解析。
+保存原文不需要。它只依赖本机 Chrome、Puppeteer 和 HTML 解析。
 
-大模型只适合做额外增强，比如自动摘要、自动打标签、提炼金句。目前这些不是保存原文的必要条件。
+启用内容加工时，由你当前使用的 Codex、Claude Code 等 Agent 理解文章、生成候选并与你对话；`wechat-notebank` 不要求额外配置模型 API key。CLI 只负责确定性的校验、文件事务、审批、双链和撤销。
 
 ### 遇到 `Navigation timeout of 30000 ms exceeded` 怎么办？
 
@@ -429,7 +447,7 @@ wechat-notebank fetch <url>
 先更新到固定版本：
 
 ```bash
-npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/tags/v0.2.0.tar.gz --force
+npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
 ```
 
 然后重试：
@@ -486,7 +504,7 @@ alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%
 当前包还没有发布到 npm registry。请使用 GitHub 安装：
 
 ```bash
-npm install -g https://github.com/Albert-Lsk/wechat-notebank/archive/refs/tags/v0.2.0.tar.gz --force
+npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
 ```
 
 ### Windows 里 `~/WeChatArticles` 能用吗？
