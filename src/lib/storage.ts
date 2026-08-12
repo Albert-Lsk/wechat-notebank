@@ -68,15 +68,32 @@ export async function saveArticle(
   content: string,
   meta: ArticleMeta
 ): Promise<string> {
-  await fs.ensureDir(archivePath);
-
-  const filename = generateFilename(title, meta.pubDate);
-  const filePath = await getAvailableFilePath(archivePath, filename);
-
-  const fileContent = matter.stringify(content, meta);
-  await fs.writeFile(filePath, fileContent, 'utf-8');
+  const filePath = await reserveArticleFilePath(archivePath, title, meta.pubDate);
+  await writeArticleFile(filePath, content, meta);
 
   return filePath;
+}
+
+// 预留最终文件路径，目录存在时才能正确检测同名文件冲突。
+export async function reserveArticleFilePath(
+  archivePath: string,
+  title: string,
+  pubDate: string
+): Promise<string> {
+  await fs.ensureDir(archivePath);
+
+  const filename = generateFilename(title, pubDate);
+  return getAvailableFilePath(archivePath, filename);
+}
+
+// 将文章正文和元数据写入指定文件。
+export async function writeArticleFile(
+  filePath: string,
+  content: string,
+  meta: ArticleMeta
+): Promise<void> {
+  const fileContent = matter.stringify(content, meta);
+  await fs.writeFile(filePath, fileContent, 'utf-8');
 }
 
 export async function articleExistsBySourceUrl(
