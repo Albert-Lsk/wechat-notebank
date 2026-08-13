@@ -80,12 +80,15 @@ async function importCommand(filePath, options = {}) {
                         };
                     }
                     log(`📥 [第 ${row.rowNumber} 行] 正在获取文章: ${row.url}`);
-                    const result = await (0, fetch_1.archiveArticle)(row.url, archivePath);
+                    const result = await (0, fetch_1.archiveArticle)(row.url, archivePath, {
+                        noImages: options.noImages,
+                    });
                     log(`✅ [第 ${row.rowNumber} 行] 已保存: ${result.filePath}`);
                     return {
                         status: 'archived',
                         archiveRoot: archivePath,
                         savedFile: result.filePath,
+                        images: result.images,
                     };
                 });
             }

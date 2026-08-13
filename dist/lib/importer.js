@@ -55,6 +55,7 @@ async function importWorkbook(filePath, archiveRow, options = {}) {
                 sequence: row.values[0],
                 sourceUrl: row.values[1],
                 status: 'skipped',
+                images: emptyImageArchiveResult(),
                 reason: 'INCOMPLETE_ROW',
             });
             continue;
@@ -103,6 +104,7 @@ async function importWorkbook(filePath, archiveRow, options = {}) {
                 sequence: importRow.sequence,
                 sourceUrl: importRow.url,
                 status: 'failed',
+                images: emptyImageArchiveResult(),
                 error: itemError,
             });
         }
@@ -191,11 +193,15 @@ function toItemResult(row, status, result) {
         sequence: row.sequence,
         sourceUrl: row.url,
         status,
+        images: result?.images || emptyImageArchiveResult(),
         ...(result?.archiveRoot ? { archiveRoot: result.archiveRoot } : {}),
         ...(result?.savedFile ? { savedFile: result.savedFile } : {}),
         ...(result?.reason ? { reason: result.reason } : {}),
         ...(result?.error ? { error: result.error } : {}),
     };
+}
+function emptyImageArchiveResult() {
+    return { total: 0, downloaded: 0 };
 }
 function toImportItemError(error) {
     if (error instanceof command_error_1.CommandError) {

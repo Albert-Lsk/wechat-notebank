@@ -4,11 +4,13 @@ export interface FetchArgs {
   url: string | undefined;
   outputPath?: string;
   json: boolean;
+  noImages?: boolean;
 }
 
 export interface ImportArgs {
   filePath: string;
   json: boolean;
+  noImages?: boolean;
 }
 
 export type SetupAgent = 'codex' | 'claude';
@@ -96,12 +98,18 @@ export function parseFetchArgs(args: string[]): FetchArgs {
   let url: string | undefined;
   let outputPath: string | undefined;
   let json = false;
+  let noImages = false;
 
   for (let i = 0; i < args.length; i++) {
     const option = args[i];
 
     if (isJsonOutputOption(option)) {
       json = true;
+      continue;
+    }
+
+    if (option === '--no-images') {
+      noImages = true;
       continue;
     }
 
@@ -126,7 +134,12 @@ export function parseFetchArgs(args: string[]): FetchArgs {
     url = option;
   }
 
-  return { url, outputPath, json };
+  return {
+    url,
+    outputPath,
+    json,
+    ...(noImages ? { noImages: true } : {}),
+  };
 }
 
 export function parseSetupArgs(args: string[]): SetupArgs {
@@ -461,10 +474,16 @@ function parseSetupAgents(value: string): SetupAgent[] {
 export function parseImportArgs(args: string[]): ImportArgs {
   let filePath: string | undefined;
   let json = false;
+  let noImages = false;
 
   for (const option of args) {
     if (isJsonOutputOption(option)) {
       json = true;
+      continue;
+    }
+
+    if (option === '--no-images') {
+      noImages = true;
       continue;
     }
 
@@ -483,7 +502,11 @@ export function parseImportArgs(args: string[]): ImportArgs {
     throw new Error('请提供 Excel 文件地址');
   }
 
-  return { filePath, json };
+  return {
+    filePath,
+    json,
+    ...(noImages ? { noImages: true } : {}),
+  };
 }
 
 function looksLikeWechatArticleUrl(value: string | undefined): boolean {

@@ -26,7 +26,13 @@ export interface ArchiveRowResult {
   archiveRoot?: string;
   savedFile?: string;
   reason?: string;
+  images?: ImageArchiveResult;
   error?: ImportItemError;
+}
+
+export interface ImageArchiveResult {
+  total: number;
+  downloaded: number;
 }
 
 export interface ImportItemError {
@@ -39,6 +45,7 @@ export interface ImportItemResult {
   sequence: string;
   sourceUrl: string;
   status: 'saved' | 'skipped' | 'failed';
+  images: ImageArchiveResult;
   archiveRoot?: string;
   savedFile?: string;
   reason?: string;
@@ -86,6 +93,7 @@ export async function importWorkbook(
         sequence: row.values[0],
         sourceUrl: row.values[1],
         status: 'skipped',
+        images: emptyImageArchiveResult(),
         reason: 'INCOMPLETE_ROW',
       });
       continue;
@@ -133,6 +141,7 @@ export async function importWorkbook(
         sequence: importRow.sequence,
         sourceUrl: importRow.url,
         status: 'failed',
+        images: emptyImageArchiveResult(),
         error: itemError,
       });
     }
@@ -246,11 +255,16 @@ function toItemResult(
     sequence: row.sequence,
     sourceUrl: row.url,
     status,
+    images: result?.images || emptyImageArchiveResult(),
     ...(result?.archiveRoot ? { archiveRoot: result.archiveRoot } : {}),
     ...(result?.savedFile ? { savedFile: result.savedFile } : {}),
     ...(result?.reason ? { reason: result.reason } : {}),
     ...(result?.error ? { error: result.error } : {}),
   };
+}
+
+function emptyImageArchiveResult(): ImageArchiveResult {
+  return { total: 0, downloaded: 0 };
 }
 
 function toImportItemError(error: unknown): ImportItemError {

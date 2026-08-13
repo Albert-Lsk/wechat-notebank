@@ -40,15 +40,15 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                                           拒绝待审核加工包
   alskai-notebank pack revoke <pack> --items <ids> [--json]
                                           撤销已发布的候选内容
-  alskai-notebank <url> [--output <folder>] [--json]
+  alskai-notebank <url> [--output <folder>] [--no-images] [--json]
                                           存档文章
-  alskai-notebank import <Excel文件地址> [--json]
+  alskai-notebank import <Excel文件地址> [--no-images] [--json]
                                           批量导入文章
 
 兼容命令:
-  wechat-notebank fetch <url> [--output <folder>] [--json]
+  wechat-notebank fetch <url> [--output <folder>] [--no-images] [--json]
                                           存档文章
-  wechat-notebank import <Excel文件地址> [--json]
+  wechat-notebank import <Excel文件地址> [--no-images] [--json]
                                           批量导入文章
   wechat-notebank --help                  显示帮助
 
@@ -320,18 +320,18 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 return;
             }
             console.error(`❌ ${message}`);
-            console.error('   用法: alskai-notebank <url> [--output <folder>] [--json]');
+            console.error('   用法: alskai-notebank <url> [--output <folder>] [--no-images] [--json]');
             process.exitCode = 1;
             return;
         }
-        const { url, outputPath, json } = fetchArgs;
+        const { url, outputPath, json, noImages = false } = fetchArgs;
         if (!url) {
             if (json) {
                 writeCommandJsonFailure('fetch', new command_error_1.CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
                 return;
             }
             console.error('❌ 请提供文章链接');
-            console.error('   用法: alskai-notebank <url> [--output <folder>] [--json]');
+            console.error('   用法: alskai-notebank <url> [--output <folder>] [--no-images] [--json]');
             process.exitCode = 1;
             return;
         }
@@ -342,7 +342,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
             console.log('');
         }
         try {
-            const result = await (0, fetch_1.fetchCommand)(url, outputPath, { json });
+            const result = await (0, fetch_1.fetchCommand)(url, outputPath, { json, noImages });
             if (json) {
                 (0, command_output_1.writeJsonOutput)({
                     ok: true,
@@ -379,12 +379,15 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 return;
             }
             console.error(`❌ ${commandError.message}`);
-            console.error('   用法: alskai-notebank import <Excel文件地址> [--json]');
+            console.error('   用法: alskai-notebank import <Excel文件地址> [--no-images] [--json]');
             process.exitCode = 1;
             return;
         }
         try {
-            const result = await (0, import_1.importCommand)(importArgs.filePath, { json: importArgs.json });
+            const result = await (0, import_1.importCommand)(importArgs.filePath, {
+                json: importArgs.json,
+                noImages: importArgs.noImages,
+            });
             if (importArgs.json) {
                 if (result.summary.failure > 0) {
                     const message = `批量导入完成，但有 ${result.summary.failure} 行失败`;

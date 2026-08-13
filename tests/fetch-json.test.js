@@ -46,6 +46,10 @@ assert.deepStrictEqual(output, {
     archiveRoot: archivePath,
     processingGoal: null,
     autoProcess: false,
+    images: {
+      total: 0,
+      downloaded: 0,
+    },
   },
 });
 assert.match(result.stderr, /正在获取文章/);
@@ -71,6 +75,10 @@ assert.deepStrictEqual(JSON.parse(duplicateResult.stdout), {
     archiveRoot: archivePath,
     processingGoal: null,
     autoProcess: false,
+    images: {
+      total: 0,
+      downloaded: 0,
+    },
     reason: 'SOURCE_URL_EXISTS',
   },
 });

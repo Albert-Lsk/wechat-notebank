@@ -39,7 +39,9 @@ exports.resolveArchivePath = resolveArchivePath;
 const parser_1 = require("../lib/parser");
 const storage_1 = require("../lib/storage");
 const config_1 = require("../lib/config");
+const images_1 = require("../lib/images");
 const command_error_1 = require("../lib/command-error");
+const fs = __importStar(require("fs-extra"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 async function fetchCommand(url, outputPath, options = {}) {
@@ -66,11 +68,14 @@ async function fetchCommand(url, outputPath, options = {}) {
                     archiveRoot: archivePath,
                     processingGoal: config?.processingGoal ?? null,
                     autoProcess: config?.autoProcess ?? false,
+                    images: emptyImageArchiveResult(),
                     reason: 'SOURCE_URL_EXISTS',
                 };
             }
             log(`📥 正在获取文章: ${url}`);
-            const { filePath, meta } = await archiveArticle(url, archivePath);
+            const { filePath, meta, images } = await archiveArticle(url, archivePath, {
+                noImages: options.noImages,
+            });
             if (!options.json) {
                 console.log(`\n✅ 文章已保存！`);
                 console.log(`📄 文件: ${filePath}`);
@@ -86,6 +91,7 @@ async function fetchCommand(url, outputPath, options = {}) {
                 archiveRoot: archivePath,
                 processingGoal: config?.processingGoal ?? null,
                 autoProcess: config?.autoProcess ?? false,
+                images,
             };
         });
     }
@@ -96,7 +102,7 @@ async function fetchCommand(url, outputPath, options = {}) {
         throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
     }
 }
-async function archiveArticle(url, archivePath) {
+async function archiveArticle(url, archivePath, options = {}) {
     // 获取 HTML
     let html;
     try {
@@ -115,15 +121,44 @@ async function archiveArticle(url, archivePath) {
     }
     // 构建元数据
     const meta = (0, parser_1.buildMeta)(parseResult, url);
-    // 保存文件
+    // 预留最终路径，再在同一事务中完成图片本地化和正文落盘。
     let filePath;
+    let assetsDirAbsPath;
+    let images = emptyImageArchiveResult();
     try {
-        filePath = await (0, storage_1.saveArticle)(archivePath, parseResult.title, parseResult.content, meta);
+        filePath = await (0, storage_1.reserveArticleFilePath)(archivePath, parseResult.title, meta.pubDate);
+        const fileName = path.basename(filePath);
+        const articleBaseName = fileName.endsWith('.md')
+            ? fileName.slice(0, -'.md'.length)
+            : fileName;
+        const assetsDirName = `${articleBaseName}.assets`;
+        assetsDirAbsPath = path.resolve(path.dirname(filePath), assetsDirName);
+        let content = parseResult.content;
+        if (!options.noImages) {
+            const localized = await (0, images_1.localizeImages)(content, assetsDirAbsPath, assetsDirName);
+            content = localized.content;
+            images = {
+                total: localized.total,
+                downloaded: localized.downloaded,
+            };
+        }
+        await (0, storage_1.writeArticleFile)(filePath, content, meta);
     }
     catch (error) {
+        if (assetsDirAbsPath) {
+            try {
+                await fs.remove(assetsDirAbsPath);
+            }
+            catch {
+                // 图片目录清理是 best-effort，不覆盖原始落盘错误。
+            }
+        }
         throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
     }
-    return { filePath, meta };
+    return { filePath, meta, images };
+}
+function emptyImageArchiveResult() {
+    return { total: 0, downloaded: 0 };
 }
 function resolveArchivePath(config, outputPath) {
     if (outputPath) {

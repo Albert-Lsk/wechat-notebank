@@ -30,10 +30,15 @@ function parseFetchArgs(args) {
     let url;
     let outputPath;
     let json = false;
+    let noImages = false;
     for (let i = 0; i < args.length; i++) {
         const option = args[i];
         if (isJsonOutputOption(option)) {
             json = true;
+            continue;
+        }
+        if (option === '--no-images') {
+            noImages = true;
             continue;
         }
         if (option === '--output' || option === '-o') {
@@ -53,7 +58,12 @@ function parseFetchArgs(args) {
         }
         url = option;
     }
-    return { url, outputPath, json };
+    return {
+        url,
+        outputPath,
+        json,
+        ...(noImages ? { noImages: true } : {}),
+    };
 }
 function parseSetupArgs(args) {
     let agents;
@@ -355,9 +365,14 @@ function parseSetupAgents(value) {
 function parseImportArgs(args) {
     let filePath;
     let json = false;
+    let noImages = false;
     for (const option of args) {
         if (isJsonOutputOption(option)) {
             json = true;
+            continue;
+        }
+        if (option === '--no-images') {
+            noImages = true;
             continue;
         }
         if (option.startsWith('-')) {
@@ -371,7 +386,11 @@ function parseImportArgs(args) {
     if (!filePath) {
         throw new Error('请提供 Excel 文件地址');
     }
-    return { filePath, json };
+    return {
+        filePath,
+        json,
+        ...(noImages ? { noImages: true } : {}),
+    };
 }
 function looksLikeWechatArticleUrl(value) {
     return /^https?:\/\/mp\.weixin\.qq\.com\/s\//.test(value || '');

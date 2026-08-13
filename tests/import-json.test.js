@@ -109,6 +109,10 @@ assert.deepStrictEqual(output, {
         status: 'saved',
         archiveRoot: projectArchivePath,
         savedFile: firstSavedFile,
+        images: {
+          total: 0,
+          downloaded: 0,
+        },
       },
       {
         rowNumber: 6,
@@ -118,6 +122,10 @@ assert.deepStrictEqual(output, {
         archiveRoot: projectArchivePath,
         savedFile: firstSavedFile,
         reason: 'SOURCE_URL_EXISTS',
+        images: {
+          total: 0,
+          downloaded: 0,
+        },
       },
       {
         rowNumber: 7,
@@ -129,6 +137,10 @@ assert.deepStrictEqual(output, {
           code: 'ARTICLE_UNAVAILABLE',
           message: `测试无法获取文章: ${failedUrl}`,
         },
+        images: {
+          total: 0,
+          downloaded: 0,
+        },
       },
       {
         rowNumber: 8,
@@ -137,6 +149,10 @@ assert.deepStrictEqual(output, {
         status: 'saved',
         archiveRoot: projectArchivePath,
         savedFile: laterSavedFile,
+        images: {
+          total: 0,
+          downloaded: 0,
+        },
       },
     ],
   },
