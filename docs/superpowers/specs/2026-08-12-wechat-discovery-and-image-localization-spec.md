@@ -54,9 +54,9 @@ alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--l
 ```
 
 - 输入含 `jintiankansha.me` 域名时自动路由 mirror；否则默认 sogou。`--source` 显式覆盖。
-- **sogou 源（最近文章）**：Puppeteer 复用 `src/lib/parser.ts` 的浏览器启动配置（channel:chrome / `WECHAT_NOTEBANK_CHROME_PATH` / 沙箱策略 / UA）。真浏览器先访问搜狗首页天然落 SNUID cookie；结果页解析 `li[id^='sogou_vr_11002601_box']`（`h3 a` 标题与 link、`.all-time-y2` 公众号名、`.s2` 内 `timeConvert('unix_ts')` 日期）；逐条导航 link 页，搜狗的 JS 拆链拼接由浏览器自动执行，轮询 `page.url()` 直到出现 `mp.weixin.qq.com` 前缀（≤10s）即得直链。`--limit` 1–10（搜狗单页 10 条，不翻页）。
-- **mirror 源（完整历史列表）**：主路径是用户直接提供专栏 URL（`https://www.jintiankansha.me/column/<id>`）；给关键词时用搜狗 `site:jintiankansha.me <关键词>` 查找专栏页作为便利路径，失败时结构化提示引导用户贴专栏 URL。专栏页与 `/t/` 文章页用 Node 20 global fetch + cheerio 解析（反爬轻，无需浏览器）；专栏页翻页跟随直到 `--limit` 或无下一页；每个列表项访问 `/t/` 页提取 `mp.weixin.qq.com` 原文直链，提取不到标 `resolved:false`（今天看啥正文有 VIP 墙，直链还原率以实测为准，不承诺 100%）。`--limit` 上限 100。
-- **节流与反爬语义（两源通用）**：逐条解析、翻页之间间隔 ≥3 秒（`WECHAT_NOTEBANK_SEARCH_INTERVAL_MS`，默认 3000，仅供测试调低）；检测到 `antispider` / `VerifyCode` / `seccode` / 验证码即**立即停止、不重试**；列表页即验证码 → `SOGOU_CAPTCHA` 失败；逐条解析中途验证码 → `status:"partial"` 保留已解析条目（沿用 import 的 partial 信封先例）。
+- **sogou 源（最近文章）**：Puppeteer 复用 `src/lib/parser.ts` 的浏览器启动配置（channel:chrome / `WECHAT_NOTEBANK_CHROME_PATH` / 沙箱策略 / UA）。真浏览器先访问搜狗首页天然落 SNUID cookie；结果页解析 `li[id^='sogou_vr_11002601_box']`（`h3 a` 标题与 link、`.all-time-y2` 公众号名、`.s2` 内 `timeConvert('unix_ts')` 日期）；逐条导航 link 页，搜狗的 JS 拆链拼接由浏览器自动执行，轮询 `page.url()` 直到出现 `mp.weixin.qq.com` 前缀（≤10s，测试可用 `WECHAT_NOTEBANK_SEARCH_RESOLVE_TIMEOUT_MS` 调低）即得直链。`--limit` 1–10（搜狗单页 10 条，不翻页），缺省 10。
+- **mirror 源（完整历史列表）**：主路径是用户直接提供专栏 URL（`https://www.jintiankansha.me/column/<id>`）；给关键词时用搜狗 `site:jintiankansha.me <关键词>` 查找专栏页作为便利路径，失败时结构化提示引导用户贴专栏 URL。专栏页与 `/t/` 文章页用 Node 20 global fetch + cheerio 解析（反爬轻，无需浏览器）；专栏页翻页跟随直到 `--limit` 或无下一页；每个列表项访问 `/t/` 页提取 `mp.weixin.qq.com` 原文直链，提取不到标 `resolved:false`（今天看啥正文有 VIP 墙，直链还原率以实测为准，不承诺 100%）。`--limit` 上限 100，缺省 100。专栏列表不提供公众号名与发布日期，mirror 源条目的 `account` / `pubDate` 恒为 `null`。
+- **节流与反爬语义（两源通用）**：逐条解析、翻页之间间隔 ≥3 秒（`WECHAT_NOTEBANK_SEARCH_INTERVAL_MS`，默认 3000，仅供测试调低）；检测到 `antispider` / `VerifyCode` / `seccode` / 验证码即**立即停止、不重试**；列表页即验证码 → `SOGOU_CAPTCHA` 失败；逐条解析中途验证码 → `status:"partial"` 保留已解析条目（沿用 import 的 partial 信封先例）；mirror 源（专栏页或 `/t/` 页）触发反爬/验证码统一报 `SEARCH_UNAVAILABLE`，`SOGOU_CAPTCHA` 仅用于搜狗通道。
 - **输出安全闸**：每个输出 URL 必须通过 `assertSafeArticleUrl`（`src/lib/url.ts`，通用 SSRF 防护）**加** `mp.weixin.qq.com` host 白名单双闸；专栏 URL 另设 `jintiankansha.me` host 白名单。未解析成功的条目输出 `resolved:false, sourceUrl:null`——搜狗 rawLink 绑定会话几分钟内过期、镜像 `/t/` 链接无归档价值，都不落 JSON。
 - 空结果不是错误：返回 `ok:true, items:[]`。`SEARCH_UNAVAILABLE` 保留给「页面骨架无法识别」（DOM 变更 / 站点不可达），与「真没搜到」严格区分，避免静默空结果。
 
@@ -95,7 +95,7 @@ alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--l
 | 错误码 | 含义 |
 |---|---|
 | `SOGOU_CAPTCHA` | 搜狗触发验证码或反爬拦截，已立即停止；建议稍后重试、降低频率或改用 mirror / 直接贴链接 |
-| `SEARCH_UNAVAILABLE` | 数据源不可达，或页面结构无法识别（DOM 变更） |
+| `SEARCH_UNAVAILABLE` | 数据源不可达，或页面结构无法识别（DOM 变更）；mirror 源触发反爬/验证码也报此码 |
 
 ### 图片本地化
 
@@ -108,7 +108,7 @@ alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--l
 ### 正文转真 Markdown
 
 - 在图片本地化（HTML 内 `img src` 已改写为相对路径）之后转换，`cleanHtml` 与 parser 逻辑不动。
-- 用成熟转换库，实现时在 turndown 与 node-html-markdown 之间实测二选一（评估维度：嵌套列表、`pre>code` 语言保留、`strong/em` 转义、微信 section 嵌套汤、传递依赖体积）。**禁止自研递归转换器**——嵌套列表、转义、表格长尾会静默错乱，违背防失传使命。
+- 用成熟转换库，**禁止自研递归转换器**——嵌套列表、转义、表格长尾会静默错乱，违背防失传使命。实测二选一已完成（2026-08-15，turndown 7.2.4 vs node-html-markdown 2.0.0，评估维度：嵌套列表、`pre>code` 语言保留、`strong/em` 转义、微信 section 嵌套汤、表格、传递依赖体积）：**选定 node-html-markdown**（`codeBlockStyle: 'fenced'`）——核心维度两者等价，node-html-markdown 原生输出 GFM 表格、自带类型定义、传递依赖约 0.4MB（turndown 链约 8.8MB 且表格需额外插件）。实测记录见 `src/lib/markdown.ts` 头部注释。
 - 只影响新归档。存量 HTML 正文不迁移（pack 引用匹配基于文件现有文本，两代格式并存安全；未来有需要再做迁移器）。
 
 ### 环境变量
@@ -119,7 +119,7 @@ alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--l
 | `WECHAT_NOTEBANK_IMAGE_TIMEOUT_MS` | `30000` | 单张图片下载超时 |
 | `WECHAT_NOTEBANK_SEARCH_HEADFUL` | 无 | `=1` 时 search 用有头浏览器（反爬逃生舱） |
 
-测试专用（延续 mock 注入惯例）：`WECHAT_NOTEBANK_TEST_HTML_MAP`（URL→HTML 文件映射）、`WECHAT_NOTEBANK_TEST_REDIRECT_MAP`（URL→跳转目标）、`WECHAT_NOTEBANK_TEST_IMAGE_MAP`（URL→本地图片文件）。
+测试专用（延续 mock 注入惯例）：`WECHAT_NOTEBANK_TEST_HTML_MAP`（URL→HTML 文件映射）、`WECHAT_NOTEBANK_TEST_REDIRECT_MAP`（URL→跳转目标）、`WECHAT_NOTEBANK_TEST_IMAGE_MAP`（URL→本地图片文件）、`WECHAT_NOTEBANK_SEARCH_RESOLVE_TIMEOUT_MS`（search 逐条直链还原的轮询上限，默认 10000，真实使用不要调低）。
 
 ### 安全与合规底线（对齐 CONTEXT.md「公共发布底线」）
 
