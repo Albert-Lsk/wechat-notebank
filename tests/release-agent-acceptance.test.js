@@ -10,6 +10,7 @@ if (process.platform !== 'darwin' || process.arch !== 'arm64') {
 }
 
 const projectRoot = path.resolve(__dirname, '..');
+const { version: packageVersion } = require('../package.json');
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'notebank-release-agent-'));
 const releasePath = path.join(sandbox, 'release');
 const homePath = path.join(sandbox, 'home');
@@ -83,7 +84,7 @@ const installedPackage = JSON.parse(fs.readFileSync(path.join(
   'wechat-notebank',
   'package.json'
 ), 'utf8'));
-assert.strictEqual(installedPackage.version, '0.2.0');
+assert.strictEqual(installedPackage.version, packageVersion);
 
 const cliPath = path.join(installPrefix, 'bin', 'alskai-notebank');
 const cliEnv = {
@@ -126,7 +127,7 @@ assert.strictEqual(initialized.status, 'configured');
 
 const doctor = parseCli(runCli(['doctor', '--json']));
 assert.strictEqual(doctor.status, 'passed');
-assert.strictEqual(doctor.result.version, '0.2.0');
+assert.strictEqual(doctor.result.version, packageVersion);
 assert.ok(doctor.result.checks.every((check) => check.status === 'passed'));
 
 const workflowMarker = path.join(sandbox, 'installed-cli-used');

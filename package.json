@@ -1,6 +1,6 @@
 {
   "name": "wechat-notebank",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Archive WeChat Official Account articles as local Markdown for Obsidian, Logseq, and personal knowledge bases",
   "main": "dist/index.js",
   "bin": {

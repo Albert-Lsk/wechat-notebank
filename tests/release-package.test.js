@@ -11,7 +11,7 @@ const packed = spawnSync('npm', ['pack', '--dry-run', '--json'], {
 
 assert.strictEqual(packed.status, 0, packed.stderr || packed.stdout);
 const [release] = JSON.parse(packed.stdout);
-assert.strictEqual(release.version, '0.2.0');
+assert.strictEqual(release.version, packageJson.version);
 assert.strictEqual(packageJson.engines.node, '>=20');
 
 const files = release.files.map(({ path: filePath }) => filePath).sort();

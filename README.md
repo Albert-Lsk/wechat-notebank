@@ -52,7 +52,8 @@ alskai-notebank "https://mp.weixin.qq.com/s/xxxxx" -o ~/WeChatArticles
 - 支持 Excel 批量导入
 - 自动按文章真实发布日期命名
 - 自动写入标题、作者、公众号、发布时间、原文链接等元数据
-- 输出 Markdown + Frontmatter，适合 Obsidian 等知识库
+- 归档时默认把正文图片下载到同名 `.assets` 目录，并输出真正的 Markdown + Frontmatter
+- 支持通过搜狗和今天看啥镜像发现公众号文章，再把返回的微信直链交给 `fetch`
 - 保存原文不依赖大模型；内容加工复用当前 Agent，不需要额外 API key
 - Windows / macOS / Linux 都可用，前提是本机能运行 Node.js 和 Chrome
 
@@ -90,17 +91,17 @@ export WECHAT_NOTEBANK_CHROME_PATH="/Applications/Google Chrome.app/Contents/Mac
 安装固定的 GitHub Release 标签，避免使用持续变化的开发分支：
 
 ```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
+npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.0/wechat-notebank-0.3.0.tgz --force
 ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 ```
 
 Release 同时提供 SHA-256 文件。需要在安装前校验时，先下载两个资产：
 
 ```bash
-curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz
-curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz.sha256
-shasum -a 256 -c wechat-notebank-0.2.0.tgz.sha256
-npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.2.0.tgz --force
+curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.0/wechat-notebank-0.3.0.tgz
+curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.0/wechat-notebank-0.3.0.tgz.sha256
+shasum -a 256 -c wechat-notebank-0.3.0.tgz.sha256
+npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.3.0.tgz --force
 ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 ```
 
@@ -117,7 +118,7 @@ ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 你也可以把下面这段原样发给具备终端权限的 Agent：
 
 ```text
-请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.2.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
+请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.3.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
 ```
 
 安装后推荐使用 `alskai-notebank` 命令。`wechat-notebank` 是兼容旧用法的命令别名，两者调用的是同一个工具。下面继续使用绝对路径，因此即使没有修改 PATH 也能运行：
@@ -133,12 +134,12 @@ ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 npm install -g wechat-notebank
 ```
 
-### v0.2.0 首版边界
+### 当前版本边界
 
-- Agent 自助安装、`setup` 和 `doctor` 只支持 macOS Apple Silicon。
+- Agent 自助安装、`setup` 和 `doctor` 仍只支持 macOS Apple Silicon。
 - 运行前需要用户自行安装 Node.js 20+、npm 和 Google Chrome；工具不会安装系统依赖，不使用 `sudo`，也不修改 shell 配置。
-- 首版只通过固定 GitHub Release 资产安装，不发布 npm registry 包，也不提供自动更新服务。
-- 首版不提供独立 macOS 程序；具备 Apple Developer Program、Developer ID 签名和公证流程后，再另立规格开发独立程序。
+- 当前版本只通过固定 GitHub Release 资产安装，不发布 npm registry 包，也不提供自动更新服务。
+- 当前版本不提供独立 macOS 程序；具备 Apple Developer Program、Developer ID 签名和公证流程后，再另立规格开发独立程序。
 
 ## 快速开始
 
@@ -196,24 +197,71 @@ $HOME\WeChatArticles
 | `alskai-notebank init --scope project --archive-path <folder>` | 设置当前项目覆盖配置 |
 | `alskai-notebank setup --agents <targets> [--dry-run] --json` | 安装或更新指定 Agent 集成 |
 | `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill、配置与加工包完整性 |
+| `alskai-notebank search <公众号名或专栏URL> [--source sogou|mirror] [--limit N] [--account <name>] [--json]` | 从搜狗或今天看啥镜像发现文章（只读） |
 | `alskai-notebank pack create --source <file> --manifest <manifest.json> --json` | 创建或修订待审核加工包 |
 | `alskai-notebank pack update <pack> --manifest <manifest.json> --json` | 记录 L4 用户原话与 Agent 整理稿 |
 | `alskai-notebank pack approve <pack> --items <ids> --json` | 选择性审批并发布 L2/L3/L4 候选 |
 | `alskai-notebank pack reject <pack> --json` | 拒绝尚未完成审批的加工包 |
 | `alskai-notebank pack revoke <pack> --items <ids> --json` | 安全撤销已发布候选及其双链 |
-| `alskai-notebank <url>` | 保存单篇文章到默认路径 |
-| `alskai-notebank fetch <url>` | 保存单篇文章，和上面等价 |
+| `alskai-notebank <url> [--no-images]` | 保存单篇文章到默认路径 |
+| `alskai-notebank fetch <url> [--no-images]` | 保存单篇文章，和上面等价 |
 | `alskai-notebank <url> --output <folder>` | 保存到指定目录 |
 | `alskai-notebank <url> -o <folder>` | `--output` 的简写 |
-| `alskai-notebank import <file.xlsx>` | 从 Excel 批量导入 |
+| `alskai-notebank import <file.xlsx> [--no-images]` | 从 Excel 批量导入 |
 | `alskai-notebank --help` | 查看帮助 |
 
 兼容旧命令：
 
 ```bash
 wechat-notebank fetch <url> -o <folder>
-wechat-notebank import <file.xlsx>
+wechat-notebank import <file.xlsx> [--no-images]
 ```
+
+### 文章发现：`search`
+
+`search` 只负责发现文章，不会自动归档或写入知识库。它返回可直接交给
+`fetch` 的 `mp.weixin.qq.com` 直链；建议始终使用 `--json`，先让用户挑选条目，再逐条归档。
+
+最近文章默认使用搜狗（单页最多 10 条）：
+
+```bash
+alskai-notebank search "饼干哥哥AGI" --source sogou --limit 3 --json
+```
+
+完整历史使用今天看啥专栏 URL（最多 100 条，镜像会自动翻页）：
+
+```bash
+alskai-notebank search \
+  "https://www.jintiankansha.me/column/FDo3tWhjrh" \
+  --source mirror --limit 100 --json
+```
+
+输入 `jintiankansha.me` 专栏地址时会自动选择 `mirror`，其他输入默认选择
+`sogou`；也可以显式传 `--source`。搜狗支持 `--account <公众号名>` 精确过滤。
+返回条目的 `resolved:false` 表示暂时无法还原微信直链，不能把镜像的 `rawLink`
+当作归档地址。搜狗或镜像触发验证码后命令会立即停止且不自动重试；镜像专栏地址可在
+今天看啥站内搜索公众号后复制。
+
+### 图片本地化与正文 Markdown
+
+归档（`fetch` 和 `import`）默认执行两步内容处理：
+
+1. 下载正文中的远程图片到与文章同名的 `<文章名>.assets/` 目录，并把 Markdown
+   中的图片引用改成 `./<文章名>.assets/imgN.<ext>` 相对路径。单张图片下载失败时，
+   会保留原远程 URL，整篇文章仍会保存；没有成功下载的图片不会留下空目录。
+2. 将正文 HTML 转成真正的 Markdown，再写入带 Frontmatter 的文章文件。这个转换只影响
+   新归档，已有文件不会被迁移。
+
+如果只想保留原有远程图片行为，可对单篇或批量导入传 `--no-images`：
+
+```bash
+alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --no-images --json
+alskai-notebank import ./articles.xlsx --no-images --json
+```
+
+使用 `--json` 时，归档结果会稳定包含 `images: { total, downloaded }`；开启本地化时
+`total` 是正文中的非 `data:` 图片数（包括下载失败的图片），`downloaded` 是成功落盘数，
+`--no-images` 时两者均为 `0`。
 
 ### 创建待审核加工包
 
@@ -421,6 +469,27 @@ alskai-notebank init --scope project \
 
 配置优先级为：当次命令参数、项目配置、全局默认配置、首次使用引导。如果命令里传了 `--output` 或 `-o`，会优先使用命令指定的输出目录。项目配置损坏时会直接报错，不会静默回退到全局配置。
 
+### v0.3.0 环境变量
+
+以下变量用于控制文章发现和图片本地化。没有设置时使用表中的默认值：
+
+| 变量 | 默认值 | 作用 |
+|------|--------|------|
+| `WECHAT_NOTEBANK_SEARCH_INTERVAL_MS` | `3000` | 搜索逐条还原直链、镜像翻页和逐条解析之间的间隔（毫秒）；真实使用不要降低，以免触发反爬 |
+| `WECHAT_NOTEBANK_IMAGE_TIMEOUT_MS` | `30000` | 单张图片下载超时（毫秒）；超时只跳过该图片，文章仍会保存 |
+| `WECHAT_NOTEBANK_SEARCH_HEADFUL` | 未设置 | 设为 `1` 时让 `search` 使用有头 Chrome，作为搜狗反爬逃生舱 |
+
+例如，测试环境可以临时缩短搜索间隔；真实搜索请保留默认的 3 秒节流：
+
+```bash
+# 仅测试环境：真实使用不要降低到 3 秒以下
+WECHAT_NOTEBANK_SEARCH_INTERVAL_MS=100 \
+  alskai-notebank search "饼干哥哥AGI" --limit 3 --json
+```
+
+抓取文章仍支持 `WECHAT_NOTEBANK_CHROME_PATH`、`WECHAT_NOTEBANK_NAVIGATION_TIMEOUT_MS`
+和 `WECHAT_NOTEBANK_CONTENT_TIMEOUT_MS`；图片与搜索变量只影响 v0.3.0 新增流水线。
+
 ## 常见问题
 
 ### 两个命令有什么区别？
@@ -447,7 +516,7 @@ wechat-notebank fetch <url>
 先更新到固定版本：
 
 ```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
+npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.0/wechat-notebank-0.3.0.tgz --force
 ```
 
 然后重试：
@@ -504,7 +573,7 @@ alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%
 当前包还没有发布到 npm registry。请使用 GitHub 安装：
 
 ```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
+npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.0/wechat-notebank-0.3.0.tgz --force
 ```
 
 ### Windows 里 `~/WeChatArticles` 能用吗？
