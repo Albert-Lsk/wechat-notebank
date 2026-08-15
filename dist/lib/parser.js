@@ -36,6 +36,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.BROWSER_USER_AGENT = void 0;
+exports.buildBrowserLaunchOptions = buildBrowserLaunchOptions;
 exports.fetchArticleHtml = fetchArticleHtml;
 exports.fetchArticleHtmlFromPage = fetchArticleHtmlFromPage;
 exports.parseWechatArticle = parseWechatArticle;
@@ -45,12 +47,15 @@ const puppeteer_core_1 = __importDefault(require("puppeteer-core"));
 const url_1 = require("./url");
 const DEFAULT_NAVIGATION_TIMEOUT_MS = 60000;
 const DEFAULT_CONTENT_TIMEOUT_MS = 30000;
+/** 与真实浏览器一致的 UA，fetch / search / 图片下载共用，避免各入口各自漂移。 */
+exports.BROWSER_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 /**
- * 使用 Puppeteer 获取微信公众号文章 HTML
- * 微信公众号有较强的反爬机制，需要使用无头浏览器
+ * 构造 Puppeteer 启动配置（fetch 与 search 共用）。
+ *
+ * search 会在返回值上追加自己的反爬 args / headful 开关；本函数保持
+ * fetch 原有行为不变。
  */
-async function fetchArticleHtml(url) {
-    (0, url_1.assertSafeArticleUrl)(url);
+function buildBrowserLaunchOptions() {
     const launchOptions = {
         headless: true,
         args: [
@@ -67,11 +72,19 @@ async function fetchArticleHtml(url) {
     else {
         launchOptions.channel = 'chrome';
     }
-    const browser = await puppeteer_core_1.default.launch(launchOptions);
+    return launchOptions;
+}
+/**
+ * 使用 Puppeteer 获取微信公众号文章 HTML
+ * 微信公众号有较强的反爬机制，需要使用无头浏览器
+ */
+async function fetchArticleHtml(url) {
+    (0, url_1.assertSafeArticleUrl)(url);
+    const browser = await puppeteer_core_1.default.launch(buildBrowserLaunchOptions());
     try {
         const page = await browser.newPage();
         // 设置 User-Agent
-        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        await page.setUserAgent(exports.BROWSER_USER_AGENT);
         // 设置额外的请求头
         await page.setExtraHTTPHeaders({
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',

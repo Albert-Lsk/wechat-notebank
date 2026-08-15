@@ -6,22 +6,17 @@ import { assertSafeArticleUrl } from './url';
 const DEFAULT_NAVIGATION_TIMEOUT_MS = 60000;
 const DEFAULT_CONTENT_TIMEOUT_MS = 30000;
 
-interface ArticleBrowserPage {
-  goto(
-    url: string,
-    options: { waitUntil: 'domcontentloaded'; timeout: number }
-  ): Promise<unknown>;
-  waitForSelector(selector: string, options: { timeout: number }): Promise<unknown>;
-  content(): Promise<string>;
-}
+/** 与真实浏览器一致的 UA，fetch / search / 图片下载共用，避免各入口各自漂移。 */
+export const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 /**
- * 使用 Puppeteer 获取微信公众号文章 HTML
- * 微信公众号有较强的反爬机制，需要使用无头浏览器
+ * 构造 Puppeteer 启动配置（fetch 与 search 共用）。
+ *
+ * search 会在返回值上追加自己的反爬 args / headful 开关；本函数保持
+ * fetch 原有行为不变。
  */
-export async function fetchArticleHtml(url: string): Promise<string> {
-  assertSafeArticleUrl(url);
-
+export function buildBrowserLaunchOptions(): LaunchOptions {
   const launchOptions: LaunchOptions = {
     headless: true,
     args: [
@@ -39,15 +34,32 @@ export async function fetchArticleHtml(url: string): Promise<string> {
     launchOptions.channel = 'chrome';
   }
 
-  const browser = await puppeteer.launch(launchOptions);
+  return launchOptions;
+}
+
+interface ArticleBrowserPage {
+  goto(
+    url: string,
+    options: { waitUntil: 'domcontentloaded'; timeout: number }
+  ): Promise<unknown>;
+  waitForSelector(selector: string, options: { timeout: number }): Promise<unknown>;
+  content(): Promise<string>;
+}
+
+/**
+ * 使用 Puppeteer 获取微信公众号文章 HTML
+ * 微信公众号有较强的反爬机制，需要使用无头浏览器
+ */
+export async function fetchArticleHtml(url: string): Promise<string> {
+  assertSafeArticleUrl(url);
+
+  const browser = await puppeteer.launch(buildBrowserLaunchOptions());
 
   try {
     const page = await browser.newPage();
 
     // 设置 User-Agent
-    await page.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
+    await page.setUserAgent(BROWSER_USER_AGENT);
 
     // 设置额外的请求头
     await page.setExtraHTTPHeaders({

@@ -13,6 +13,16 @@ export interface ImportArgs {
   noImages?: boolean;
 }
 
+export type SearchSource = 'sogou' | 'mirror';
+
+export interface SearchArgs {
+  query: string;
+  source: SearchSource;
+  limit: number;
+  account?: string;
+  json: boolean;
+}
+
 export type SetupAgent = 'codex' | 'claude';
 
 export interface SetupArgs {
@@ -506,6 +516,107 @@ export function parseImportArgs(args: string[]): ImportArgs {
     filePath,
     json,
     ...(noImages ? { noImages: true } : {}),
+  };
+}
+
+/**
+ * search 源路由：显式 --source 优先；输入是今天看啥域名时自动走 mirror；
+ * 其余（公众号名等关键词）默认 sogou。
+ */
+function resolveSearchSource(
+  query: string,
+  explicit: SearchSource | undefined
+): SearchSource {
+  if (explicit) {
+    return explicit;
+  }
+
+  try {
+    const hostname = new URL(query).hostname.toLowerCase();
+    if (hostname === 'jintiankansha.me' || hostname === 'www.jintiankansha.me') {
+      return 'mirror';
+    }
+  } catch {
+    // 非 URL 输入按公众号关键词处理。
+  }
+
+  return 'sogou';
+}
+
+export function parseSearchArgs(args: string[]): SearchArgs {
+  let query: string | undefined;
+  let source: SearchSource | undefined;
+  let limit: number | undefined;
+  let account: string | undefined;
+  let json = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const option = args[i];
+
+    if (isJsonOutputOption(option)) {
+      json = true;
+      continue;
+    }
+
+    if (option === '--source') {
+      const value = args[i + 1];
+      if (value !== 'sogou' && value !== 'mirror') {
+        throw new Error('--source requires sogou or mirror');
+      }
+      source = value;
+      i++;
+      continue;
+    }
+
+    if (option === '--limit') {
+      const value = args[i + 1];
+      const parsed = Number(value);
+      if (!value || value.startsWith('-') || !Number.isInteger(parsed)) {
+        throw new Error('--limit requires a positive integer');
+      }
+      limit = parsed;
+      i++;
+      continue;
+    }
+
+    if (option === '--account') {
+      const value = args[i + 1];
+      if (!value || value.startsWith('-')) {
+        throw new Error('--account requires an account name');
+      }
+      account = value;
+      i++;
+      continue;
+    }
+
+    if (option.startsWith('-')) {
+      throw new Error(`Unknown search option: ${option}`);
+    }
+
+    if (query) {
+      throw new Error(`Unexpected search argument: ${option}`);
+    }
+
+    query = option;
+  }
+
+  if (!query) {
+    throw new Error('请提供公众号名称或今天看啥专栏链接');
+  }
+
+  const resolvedSource = resolveSearchSource(query, source);
+  // 搜狗单页 10 条不翻页，mirror 上限 100（spec 安全底线）。
+  const maxLimit = resolvedSource === 'sogou' ? 10 : 100;
+  if (limit !== undefined && (limit < 1 || limit > maxLimit)) {
+    throw new Error(`--limit 必须在 1 到 ${maxLimit} 之间（${resolvedSource} 源）`);
+  }
+
+  return {
+    query,
+    source: resolvedSource,
+    limit: limit ?? maxLimit,
+    ...(account ? { account } : {}),
+    json,
   };
 }
 
