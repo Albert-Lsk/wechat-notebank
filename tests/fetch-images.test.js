@@ -61,8 +61,17 @@ assert.strictEqual(fs.readFileSync(path.join(assetsDir, 'img2.jpg'), 'utf8'), 'o
 const savedContent = fs.readFileSync(savedFile, 'utf8');
 assert.match(savedContent, /\.assets\/img1\.png/);
 assert.match(savedContent, /\.assets\/img2\.jpg/);
+const assetsDirName = path.basename(assetsDir);
+assert.match(
+  savedContent,
+  new RegExp(`!\\[[^\\]]*\\]\\(\\./${assetsDirName}/img1\\.png\\)`)
+);
+assert.match(
+  savedContent,
+  new RegExp(`!\\[[^\\]]*\\]\\(\\./${assetsDirName}/img2\\.jpg\\)`)
+);
+assert.doesNotMatch(savedContent, /<(?:p|div|section|h[1-6]|ul|ol|li|pre|blockquote|table|img)\b/i);
 assert.match(savedContent, /https:\/\/images\.example\/missing\.gif/);
-assert.match(savedContent, /data:image\/png;base64,AAAA/);
 
 const noImagesArchive = path.join(tempHome, 'no-images-archive');
 const noImagesUrl = 'https://mp.weixin.qq.com/s/fetch-images-disabled';
@@ -81,5 +90,7 @@ assert.strictEqual(
 const noImagesContent = fs.readFileSync(noImagesOutput.result.savedFile, 'utf8');
 assert.match(noImagesContent, /https:\/\/images\.example\/lazy\.png/);
 assert.match(noImagesContent, /https:\/\/images\.example\/ordinary\.jpg/);
+assert.match(noImagesContent, /!\[[^\]]*\]\(https:\/\/images\.example\/lazy\.png\)/);
+assert.doesNotMatch(noImagesContent, /<(?:p|div|section|h[1-6]|ul|ol|li|pre|blockquote|table|img)\b/i);
 
 console.log('fetch images tests passed');

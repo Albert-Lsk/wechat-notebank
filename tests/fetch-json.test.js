@@ -54,6 +54,9 @@ assert.deepStrictEqual(output, {
 });
 assert.match(result.stderr, /正在获取文章/);
 assert.ok(fs.existsSync(output.result.savedFile));
+const savedContent = fs.readFileSync(output.result.savedFile, 'utf8');
+assert.match(savedContent, /这是一篇用于验证 CLI 保存行为的文章。/);
+assert.doesNotMatch(savedContent, /<(?:p|div|section|h[1-6]|ul|ol|li|pre|blockquote|table)\b/i);
 
 const duplicateResult = runCli([
   'fetch',

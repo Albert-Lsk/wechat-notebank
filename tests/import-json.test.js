@@ -165,6 +165,9 @@ assert.match(result.stderr, /正在导入 Excel/);
 assert.match(result.stderr, /测试无法获取文章/);
 assert.ok(fs.existsSync(firstSavedFile));
 assert.ok(fs.existsSync(laterSavedFile));
+const importedContent = fs.readFileSync(firstSavedFile, 'utf8');
+assert.match(importedContent, /这是一篇用于验证 CLI 保存行为的文章。/);
+assert.doesNotMatch(importedContent, /<(?:p|div|section|h[1-6]|ul|ol|li|pre|blockquote|table)\b/i);
 assert.strictEqual(fs.existsSync(globalArchivePath), false);
 
 const retryResult = runCli(['import', workbookPath, '--json'], tempHome);

@@ -40,6 +40,7 @@ const parser_1 = require("../lib/parser");
 const storage_1 = require("../lib/storage");
 const config_1 = require("../lib/config");
 const images_1 = require("../lib/images");
+const markdown_1 = require("../lib/markdown");
 const command_error_1 = require("../lib/command-error");
 const fs = __importStar(require("fs-extra"));
 const os = __importStar(require("os"));
@@ -142,6 +143,7 @@ async function archiveArticle(url, archivePath, options = {}) {
                 downloaded: localized.downloaded,
             };
         }
+        content = (0, markdown_1.convertArticleHtmlToMarkdown)(content);
         await (0, storage_1.writeArticleFile)(filePath, content, meta);
     }
     catch (error) {

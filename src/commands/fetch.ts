@@ -7,6 +7,7 @@ import {
 } from '../lib/storage';
 import { readConfig } from '../lib/config';
 import { localizeImages } from '../lib/images';
+import { convertArticleHtmlToMarkdown } from '../lib/markdown';
 import { ArticleMeta, ParseResult, WechatNotebankConfig } from '../types';
 import { CommandError, getErrorMessage } from '../lib/command-error';
 import * as fs from 'fs-extra';
@@ -153,6 +154,8 @@ export async function archiveArticle(
         downloaded: localized.downloaded,
       };
     }
+
+    content = convertArticleHtmlToMarkdown(content);
 
     await writeArticleFile(filePath, content, meta);
   } catch (error) {
