@@ -12,6 +12,7 @@ Resolve the CLI once before loading a route: use `command -v alskai-notebank` wh
 ## Route by intent
 
 - Installation, update, environment diagnosis, or Agent integration repair: **read and follow [Setup and doctor](references/setup.md)**.
+- Article discovery by public account name, recent posts, or a mirror column URL: **read and follow [Discover articles](references/discover.md)**.
 - Archive requests for one or multiple URLs, including Excel or Numbers workbooks: **read and follow [Archive and batch import](references/archive.md)**.
 - Requests to process a saved article or an archive result into reviewable candidates: **read and follow [Content processing](references/processing.md)**.
 - Requests to inspect a pending pack, answer L4 questions, approve or reject candidates, or revoke published assets: **read and follow [Review and publishing](references/review.md)**.
@@ -22,5 +23,6 @@ Resolve the CLI once before loading a route: use `command -v alskai-notebank` wh
 - Load only the reference required by the current route.
 - Never assume user identity or content goal.
 - Do not reimplement fetching, parsing, configuration resolution, deduplication, workbook import, or file writes in the Agent.
+- Discovery is performed by the CLI; do not scrape Sogou or mirror sites in the Agent, and do not automatically archive search results.
 - Do not promise recovery of unavailable articles or interact with WeChat accounts.
 - Do not upload, copy, or expose the user's Obsidian vault.

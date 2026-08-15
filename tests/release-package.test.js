@@ -35,6 +35,7 @@ for (const requiredPath of [
   'dist/index.js',
   'skills/alskai-notebank/SKILL.md',
   'skills/alskai-notebank/references/setup.md',
+  'skills/alskai-notebank/references/discover.md',
   'skills/alskai-notebank/references/archive.md',
   'skills/alskai-notebank/references/processing.md',
   'skills/alskai-notebank/references/review.md',

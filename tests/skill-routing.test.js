@@ -8,6 +8,7 @@ const projectRoot = path.resolve(__dirname, '..');
 const skillRoot = path.join(projectRoot, 'skills', 'alskai-notebank');
 const entryPath = path.join(skillRoot, 'SKILL.md');
 const setupReferencePath = path.join(skillRoot, 'references', 'setup.md');
+const discoverReferencePath = path.join(skillRoot, 'references', 'discover.md');
 const archiveReferencePath = path.join(skillRoot, 'references', 'archive.md');
 const processingReferencePath = path.join(skillRoot, 'references', 'processing.md');
 const reviewReferencePath = path.join(skillRoot, 'references', 'review.md');
@@ -27,6 +28,7 @@ const publicSkillEntries = fs.readdirSync(path.join(projectRoot, 'skills'))
 assert.deepStrictEqual(publicSkillEntries, ['alskai-notebank']);
 assert.match(entry, /^---\nname: alskai-notebank\n/m);
 assert.match(entry, /references\/setup\.md/);
+assert.match(entry, /references\/discover\.md/);
 assert.match(entry, /references\/archive\.md/);
 assert.match(entry, /references\/processing\.md/);
 assert.match(entry, /references\/review\.md/);
@@ -36,6 +38,20 @@ assert.match(entry, /CLI[^\n]*(deterministic|确定性)/i);
 assert.match(entry, /command -v alskai-notebank/);
 assert.match(entry, /\$HOME\/\.local\/bin\/alskai-notebank/);
 assert.doesNotMatch(entry, /alskai-notebank (setup|doctor|fetch|import)/);
+
+assert.ok(fs.existsSync(discoverReferencePath));
+const discoverReference = fs.readFileSync(discoverReferencePath, 'utf8');
+assert.match(discoverReference, /alskai-notebank search [^\n]*--json/);
+assert.match(discoverReference, /recent[^\n]*sogou/i);
+assert.match(discoverReference, /history[^\n]*mirror/i);
+assert.match(discoverReference, /jintiankansha\.me/);
+assert.match(discoverReference, /exactly one[^\n]*search/i);
+assert.match(discoverReference, /captcha[^\n]*(stop|retry)/i);
+assert.match(discoverReference, /rawLink/);
+assert.match(discoverReference, /sourceUrl/);
+assert.match(discoverReference, /resolved:false/);
+assert.match(discoverReference, /crawler|subscription|scheduled monitor/i);
+assert.match(discoverReference, /do not scrape/i);
 
 assert.ok(fs.existsSync(setupReferencePath));
 const setupReference = fs.readFileSync(setupReferencePath, 'utf8');
@@ -61,6 +77,8 @@ assert.match(archiveReference, /`partial`/);
 assert.match(archiveReference, /stderr/);
 assert.match(archiveReference, /result\.autoProcess/);
 assert.match(archiveReference, /result\.processingGoal/);
+assert.match(archiveReference, /discover\.md/);
+assert.match(archiveReference, /crawler or account-level collection job/);
 assert.match(archiveReference, /current request[^\n]*result\.processingGoal/i);
 assert.match(archiveReference, /only save[^\n]*autoProcess/i);
 assert.match(archiveReference, /skipped[^\n]*eligible[^\n]*explicit/i);
@@ -169,10 +187,13 @@ const installResult = spawnSync('bash', ['scripts/install-skills.sh'], {
 assert.strictEqual(installResult.status, 0, installResult.stderr || installResult.stdout);
 for (const target of [
   path.join(tempHome, '.claude', 'skills', 'alskai-notebank', 'references', 'setup.md'),
+  path.join(tempHome, '.claude', 'skills', 'alskai-notebank', 'references', 'discover.md'),
   path.join(tempHome, '.claude', 'skills', 'alskai-notebank', 'references', 'archive.md'),
   path.join(tempHome, '.codex', 'skills', 'alskai-notebank', 'references', 'setup.md'),
+  path.join(tempHome, '.codex', 'skills', 'alskai-notebank', 'references', 'discover.md'),
   path.join(tempHome, '.codex', 'skills', 'alskai-notebank', 'references', 'archive.md'),
   path.join(tempHome, '.agents', 'skills', 'alskai-notebank', 'references', 'setup.md'),
+  path.join(tempHome, '.agents', 'skills', 'alskai-notebank', 'references', 'discover.md'),
   path.join(tempHome, '.agents', 'skills', 'alskai-notebank', 'references', 'archive.md'),
   path.join(tempHome, '.claude', 'skills', 'alskai-notebank', 'references', 'processing.md'),
   path.join(tempHome, '.codex', 'skills', 'alskai-notebank', 'references', 'processing.md'),

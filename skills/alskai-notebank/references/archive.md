@@ -22,7 +22,7 @@ Only when the user explicitly supplies a destination:
 alskai-notebank fetch "<url>" --output "<folder>" --json
 ```
 
-For multiple URLs supplied directly, run the single-URL command once per URL in input order. Continue after an individual failure and keep one result per input URL. Do not turn this into a crawler or account-level collection job.
+For multiple URLs supplied directly, run the single-URL command once per URL in input order. Continue after an individual failure and keep one result per input URL. Keep this route limited to the supplied direct URLs; it must not become a crawler or account-level collection job. If the user wants to find articles by account or history, load [Discover articles](discover.md) first and archive only the URLs the user selects.
 
 ## Workbook import
 
