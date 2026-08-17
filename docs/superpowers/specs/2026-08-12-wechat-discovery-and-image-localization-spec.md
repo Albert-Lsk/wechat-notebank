@@ -55,8 +55,8 @@ alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--l
 
 - 输入含 `jintiankansha.me` 域名时自动路由 mirror；否则默认 sogou。`--source` 显式覆盖。
 - **sogou 源（最近文章）**：Puppeteer 复用 `src/lib/parser.ts` 的浏览器启动配置（channel:chrome / `WECHAT_NOTEBANK_CHROME_PATH` / 沙箱策略 / UA）。真浏览器先访问搜狗首页天然落 SNUID cookie；结果页解析 `li[id^='sogou_vr_11002601_box']`（`h3 a` 标题与 link、`.all-time-y2` 公众号名、`.s2` 内 `timeConvert('unix_ts')` 日期）；逐条导航 link 页，搜狗的 JS 拆链拼接由浏览器自动执行，轮询 `page.url()` 直到出现 `mp.weixin.qq.com` 前缀（≤10s，测试可用 `WECHAT_NOTEBANK_SEARCH_RESOLVE_TIMEOUT_MS` 调低）即得直链。`--limit` 1–10（搜狗单页 10 条，不翻页），缺省 10。
-- **mirror 源（完整历史列表）**：主路径是用户直接提供专栏 URL（`https://www.jintiankansha.me/column/<id>`）；给关键词时用搜狗 `site:jintiankansha.me <关键词>` 查找专栏页作为便利路径，失败时结构化提示引导用户贴专栏 URL。专栏页与 `/t/` 文章页用 Node 20 global fetch + cheerio 解析（反爬轻，无需浏览器）；专栏页翻页跟随直到 `--limit` 或无下一页；每个列表项访问 `/t/` 页提取 `mp.weixin.qq.com` 原文直链，提取不到标 `resolved:false`（今天看啥正文有 VIP 墙，直链还原率以实测为准，不承诺 100%）。`--limit` 上限 100，缺省 100。专栏列表不提供公众号名与发布日期，mirror 源条目的 `account` / `pubDate` 恒为 `null`。
-- **节流与反爬语义（两源通用）**：逐条解析、翻页之间间隔 ≥3 秒（`WECHAT_NOTEBANK_SEARCH_INTERVAL_MS`，默认 3000，仅供测试调低）；检测到 `antispider` / `VerifyCode` / `seccode` / 验证码即**立即停止、不重试**；列表页即验证码 → `SOGOU_CAPTCHA` 失败；逐条解析中途验证码 → `status:"partial"` 保留已解析条目（沿用 import 的 partial 信封先例）；mirror 源（专栏页或 `/t/` 页）触发反爬/验证码统一报 `SEARCH_UNAVAILABLE`，`SOGOU_CAPTCHA` 仅用于搜狗通道。
+- **mirror 源（完整历史列表）**：主路径是用户直接提供专栏 URL（`https://www.jintiankansha.me/column/<id>`）；给关键词时用搜狗 `site:jintiankansha.me <关键词>` 查找专栏页作为便利路径，失败时结构化提示引导用户贴专栏 URL。专栏页与 `/t/` 文章页用 Node 20 global fetch + cheerio 解析（无需浏览器）；专栏页翻页跟随直到 `--limit` 或无下一页；每个列表项访问 `/t/` 页提取 `mp.weixin.qq.com` 原文直链，提取不到标 `resolved:false`。2026-08-15 对真实专栏第 1 页 13 篇样本的验证结果为 **0/13**：`/t/` 页均无微信直链，原文入口统一位于 `/t_original/<id>`，但该路径会 302 到 `/account/signin` 登录墙。安全底线禁止登录或绕过，因此不访问该路径，`resolved:false, sourceUrl:null` 是预期降级结果。`--limit` 上限 100，缺省 100。专栏列表不提供公众号名与发布日期，mirror 源条目的 `account` / `pubDate` 恒为 `null`。
+- **节流与数据源失败语义**：两源逐条解析、mirror 翻页之间间隔 ≥3 秒（`WECHAT_NOTEBANK_SEARCH_INTERVAL_MS`，默认 3000，仅供测试调低）。`antispider` URL 以及 `VerifyCode` / `seccode` / 验证码 HTML 文本标记是 **sogou 专用判据**：列表页命中 → `SOGOU_CAPTCHA` 失败；逐条解析中途命中 → `status:"partial"` 保留已解析条目，且均立即停止、不重试。mirror 不复用该文本判据（真实站全站模板含 `linkbuxverifycode` SEO 验证 meta，会造成误报），专栏页改由 HTTP 状态与 `/t/` 列表骨架共同判断可用性：请求失败、非 2xx 或骨架无法识别 → `SEARCH_UNAVAILABLE`；单篇 `/t/` 页非 2xx 或无微信直链只标 `resolved:false`，不中断整批。
 - **输出安全闸**：每个输出 URL 必须通过 `assertSafeArticleUrl`（`src/lib/url.ts`，通用 SSRF 防护）**加** `mp.weixin.qq.com` host 白名单双闸；专栏 URL 另设 `jintiankansha.me` host 白名单。未解析成功的条目输出 `resolved:false, sourceUrl:null`——搜狗 rawLink 绑定会话几分钟内过期、镜像 `/t/` 链接无归档价值，都不落 JSON。
 - 空结果不是错误：返回 `ok:true, items:[]`。`SEARCH_UNAVAILABLE` 保留给「页面骨架无法识别」（DOM 变更 / 站点不可达），与「真没搜到」严格区分，避免静默空结果。
 
@@ -95,7 +95,7 @@ alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--l
 | 错误码 | 含义 |
 |---|---|
 | `SOGOU_CAPTCHA` | 搜狗触发验证码或反爬拦截，已立即停止；建议稍后重试、降低频率或改用 mirror / 直接贴链接 |
-| `SEARCH_UNAVAILABLE` | 数据源不可达，或页面结构无法识别（DOM 变更）；mirror 源触发反爬/验证码也报此码 |
+| `SEARCH_UNAVAILABLE` | 数据源不可达，或页面结构无法识别（DOM 变更）；mirror 专栏页请求失败、非 2xx 或列表骨架无法识别也报此码 |
 
 ### 图片本地化
 

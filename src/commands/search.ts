@@ -11,6 +11,7 @@ import {
 import {
   assertMirrorColumnUrl,
   extractWeixinUrl,
+  hasMirrorColumnPageSkeleton,
   isMirrorColumnUrl,
   parseColumnPage,
 } from '../lib/mirror';
@@ -215,13 +216,12 @@ async function searchMirror(
 
     log(`📄 正在读取专栏页: ${pageUrl}`);
     const html = await fetchMirrorPage(pageUrl);
-    if (detectAntispider(pageUrl, html)) {
+    if (!hasMirrorColumnPageSkeleton(html)) {
       throw new CommandError(
         'SEARCH_UNAVAILABLE',
-        '今天看啥触发了验证码/反爬拦截，已立即停止。请稍后重试或降低频率'
+        '今天看啥专栏页结构无法识别（可能是页面改版或站点不可达）。请检查数据源状态'
       );
     }
-
     const page = parseColumnPage(html, pageUrl);
     for (const item of page.items) {
       if (entries.length >= args.limit) {

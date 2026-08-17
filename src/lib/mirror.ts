@@ -21,6 +21,12 @@ export interface MirrorColumnPage {
   nextPageUrl: string | null;
 }
 
+/** 专栏页至少应包含一个 `/t/` 列表链接；否则不能把未知页面当成空结果。 */
+export function hasMirrorColumnPageSkeleton(html: string): boolean {
+  const $ = cheerio.load(html || '');
+  return $("a[href*='/t/']").length > 0;
+}
+
 /**
  * 解析今天看啥专栏页的文章列表。
  *
@@ -151,6 +157,9 @@ function findNextPageUrl($: cheerio.CheerioAPI, baseUrl: string): string | null 
 
   // rel=next is the most explicit form and should win over text heuristics.
   $('a[rel~="next" i]').each((_, element) => {
+    candidates.push($(element));
+  });
+  $('a#p_next').each((_, element) => {
     candidates.push($(element));
   });
   $('.next a, a.next, .pagination-next a, .pager-next a').each((_, element) => {
