@@ -189,6 +189,47 @@ function runCli(args, homePath, extraEnv = {}) {
     corruptOwnerResult.stderr || corruptOwnerResult.stdout
   );
 
+  const collisionArchivePath = path.join(tempHome, 'collision-archive');
+  const collisionCount = 12;
+  const collisionUrls = Array.from(
+    { length: collisionCount },
+    (_, index) => `https://mp.weixin.qq.com/s/same-title-${index}`
+  );
+  const collisionResults = await Promise.all(
+    collisionUrls.map((collisionUrl) =>
+      runCli(['fetch', collisionUrl, '--output', collisionArchivePath, '--json'], tempHome)
+    )
+  );
+  for (const result of collisionResults) {
+    assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  }
+  const collisionOutputs = collisionResults.map((result) => JSON.parse(result.stdout));
+  const savedCollisionOutputs = collisionOutputs.filter((output) => output.status === 'saved');
+  const collisionMdFiles = fs
+    .readdirSync(collisionArchivePath)
+    .filter((fileName) => fileName.endsWith('.md'));
+  // 同标题不同 URL 并发归档：报告 saved 的条数必须等于磁盘 .md 条数，不允许静默覆盖。
+  assert.strictEqual(savedCollisionOutputs.length, collisionCount);
+  assert.strictEqual(collisionMdFiles.length, savedCollisionOutputs.length);
+  const distinctSavedFiles = new Set(
+    savedCollisionOutputs.map((output) => output.result.savedFile)
+  );
+  assert.strictEqual(distinctSavedFiles.size, collisionCount);
+  for (const output of savedCollisionOutputs) {
+    const savedContent = fs.readFileSync(output.result.savedFile, 'utf8');
+    assert.ok(
+      savedContent.includes(output.result.sourceUrl),
+      `${output.result.savedFile} 应属于 ${output.result.sourceUrl}`
+    );
+  }
+  const diskSourceUrls = collisionMdFiles.map((fileName) => {
+    const content = fs.readFileSync(path.join(collisionArchivePath, fileName), 'utf8');
+    const match = content.match(/^sourceUrl: '?([^'\n]+)'?$/m);
+    assert.ok(match, `${fileName} 缺少 sourceUrl`);
+    return match[1].trim();
+  });
+  assert.deepStrictEqual(diskSourceUrls.sort(), [...collisionUrls].sort());
+
   console.log('fetch concurrency tests passed');
 })().catch((error) => {
   console.error(error);

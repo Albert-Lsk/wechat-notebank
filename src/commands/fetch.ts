@@ -134,9 +134,12 @@ export async function archiveArticle(
   // 预留最终路径，再在同一事务中完成图片本地化和正文落盘。
   let filePath: string;
   let assetsDirAbsPath: string | undefined;
+  let reservedFilePath: string | undefined;
+  let fileWritten = false;
   let images = emptyImageArchiveResult();
   try {
     filePath = await reserveArticleFilePath(archivePath, parseResult.title, meta.pubDate);
+    reservedFilePath = filePath;
 
     const fileName = path.basename(filePath);
     const articleBaseName = fileName.endsWith('.md')
@@ -158,12 +161,20 @@ export async function archiveArticle(
     content = convertArticleHtmlToMarkdown(content);
 
     await writeArticleFile(filePath, content, meta);
+    fileWritten = true;
   } catch (error) {
     if (assetsDirAbsPath) {
       try {
         await fs.remove(assetsDirAbsPath);
       } catch {
         // 图片目录清理是 best-effort，不覆盖原始落盘错误。
+      }
+    }
+    if (reservedFilePath && !fileWritten) {
+      try {
+        await fs.remove(reservedFilePath);
+      } catch {
+        // 占位文件清理是 best-effort，不覆盖原始落盘错误。
       }
     }
     throw new CommandError('TRANSACTION_FAILED', getErrorMessage(error));
