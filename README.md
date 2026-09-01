@@ -314,6 +314,108 @@ alskai-notebank pack revoke \
 
 `doctor --json` 会只读报告生成文件缺失、哈希漂移、双链断裂、隐藏状态缺失，以及当前状态与 revision 快照不一致；它不会自动删除、改写或修复知识库。
 
+## Manifest v1 规范
+
+`pack create` 和 `pack update` 读取的 Manifest 是一份 JSON 文件。校验器对字段、类型和取值做确定性检查，任何一项不满足都会拒收整份 Manifest。
+
+### 顶层字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `schemaVersion` | number | 是 | 固定为 `1`，其他值会被拒收 |
+| `sourceFile` | string | 是 | 原文 Markdown 的绝对路径，必须与命令的 `--source` 参数解析后一致 |
+| `sourceUrl` | string | 是 | 非空字符串，必须与原文 Frontmatter 的 `sourceUrl` 一致 |
+| `processingGoal` | string \| null | 是 | 加工目标；传 `null` 表示通用加工，同一来源不同目标会生成不同加工包 |
+| `atomicNotes` | array | 是 | L2 候选数组，可为空，最多 99 项 |
+| `materials` | array | 是 | L3 候选数组，可为空，最多 99 项 |
+| `reviewQuestions` | array | 是 | L4 问题数组，可为空，最多 99 项 |
+
+顶层不允许出现上述之外的字段；候选对象同样只接受各自表内列出的字段。
+
+### L2 `atomicNotes` 候选
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 按数组顺序固定为 `L2-01`、`L2-02`…，且不能重复 |
+| `title` | string | 是 | 非空卡片标题 |
+| `claim` | string | 是 | 非空，一句话观点 |
+| `evidence` | string | 是 | 非空，来自原文的支撑证据 |
+| `boundary` | string | 是 | 非空，适用边界 |
+| `useCases` | string[] | 是 | 非空字符串数组，可复用的场景 |
+
+### L3 `materials` 候选
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 按数组顺序固定为 `L3-01`、`L3-02`…，且不能重复 |
+| `kind` | string | 是 | 只接受 `quote`、`paraphrase`、`case`、`data` |
+| `title` | string | 是 | 非空素材标题 |
+| `content` | string | 是 | 非空；`kind` 为 `quote` 时必须原文精确命中，见下文 |
+| `sourceSection` | string | 是 | 非空，素材在原文中的出处小节 |
+
+### L4 `reviewQuestions` 候选
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 按数组顺序固定为 `L4-Q01`、`L4-Q02`…，且不能重复 |
+| `question` | string | 是 | 非空，向用户提出的问题 |
+
+### 完整示例
+
+下面这份示例可以直接复制保存为 `manifest.json`，能通过校验器校验（`sourceFile` 换成你机器上的原文路径，`sourceUrl` 与原文 Frontmatter 保持一致）：
+
+```json
+{
+  "schemaVersion": 1,
+  "sourceFile": "/Users/you/WeChatArticles/L1_原文/WeChat/2026-04-13-5种Obsidian知识库架构对比.md",
+  "sourceUrl": "https://mp.weixin.qq.com/s/abcDef123",
+  "processingGoal": "提炼可复用的知识库搭建方法",
+  "atomicNotes": [
+    {
+      "id": "L2-01",
+      "title": "知识库先定结构，再选工具",
+      "claim": "先确定四层结构，再挑选承载工具，日后迁移的成本才可控。",
+      "evidence": "文章用同一套四层结构对比了五种主流工具的迁移路径。",
+      "boundary": "只适用于个人知识库，不涉及团队协作场景。",
+      "useCases": ["搭建个人知识库", "评估笔记工具"]
+    }
+  ],
+  "materials": [
+    {
+      "id": "L3-01",
+      "kind": "quote",
+      "title": "结构先于工具",
+      "content": "结构先于工具：先确定知识要怎么分层，再去挑选承载它的软件。",
+      "sourceSection": "第二节：为什么结构先于工具"
+    }
+  ],
+  "reviewQuestions": [
+    {
+      "id": "L4-Q01",
+      "question": "你现在的知识库缺了哪一层，打算怎么补？"
+    }
+  ]
+}
+```
+
+### quote 引用必须原文精确命中
+
+`kind` 为 `quote` 的 L3 候选，`content` 必须能在原文正文中一字不差地找到（校验时会排除原文里的加工包双链衍生区）。校验器会拒收未命中的引用，`pack create --json` 的报错形态如下：
+
+```json
+{
+  "ok": false,
+  "command": "pack.create",
+  "status": "failed",
+  "error": {
+    "code": "QUOTE_NOT_FOUND",
+    "message": "直接引用 L3-01 未在原文中精确命中"
+  }
+}
+```
+
+`paraphrase`、`case`、`data` 三种类型不做精确命中校验，但内容仍应能对应到 `sourceSection` 指向的原文位置。
+
 ## 输出文件
 
 保存后的文件名格式：
