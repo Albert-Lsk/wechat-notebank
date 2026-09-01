@@ -87,20 +87,13 @@ export WECHAT_NOTEBANK_CHROME_PATH="/Applications/Google Chrome.app/Contents/Mac
 
 首版 Agent 自助安装支持 macOS Apple Silicon。运行依赖 Node.js 20+、npm 和 Google Chrome；工具会诊断这些依赖，但不会替你安装它们。
 
-安装固定的 GitHub Release 标签，避免使用持续变化的开发分支：
-
-```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
-ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
-```
-
-Release 同时提供 SHA-256 文件。需要在安装前校验时，先下载两个资产：
+安装固定的 GitHub Release 标签，避免使用持续变化的开发分支。标准安装路径是：下载 Release 资产，校验 SHA-256，再从本地 tgz 安装：
 
 ```bash
 curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz
 curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz.sha256
 shasum -a 256 -c wechat-notebank-0.2.0.tgz.sha256
-npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.2.0.tgz --force
+npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.2.0.tgz
 ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 ```
 
@@ -114,11 +107,32 @@ ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 
 只使用 Codex 时传 `codex`，只使用 Claude Code 时传 `claude`。`setup` 会安装当前包附带的 Skill；Claude Code 还会安装 `/alskai-notebank` 命令。已有文件更新前会备份，失败时会恢复，重复执行不会重复改写相同版本。成功后请重启 Codex 或 Claude Code，让当前会话重新发现 Skill。
 
+### 机器上装过旧版本
+
+这台机器装过旧版本时，先显式清理，再执行上面的标准安装路径：
+
+```bash
+rm -rf "$HOME/.local/lib/node_modules/wechat-notebank"
+rm -f "$HOME/.local/bin/alskai-notebank" "$HOME/.local/bin/wechat-notebank"
+```
+
+第一条命令删除旧版本安装在 `~/.local` 下的 `node_modules` 目录，第二条删除 `alskai-notebank` 和 `wechat-notebank` 两个旧入口文件。标准安装命令不带 `--force`：旧版本残留会让 `npm install` 在冲突时大声失败并整体退出，而不是安静地装一半；先清理再安装，得到的结果才是完整、可校验的。
+
 你也可以把下面这段原样发给具备终端权限的 Agent：
 
 ```text
-请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.2.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
+请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.2.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。安装完成后需要重启 Agent 会话，Skill 才会被发现（setup 成功时会返回 restartRequired: true）。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
 ```
+
+### 安装排障
+
+安装或 `setup` 失败时，先运行只读诊断，按失败的检查项定位原因：
+
+```bash
+"$ALSKAI_NOTEBANK" doctor --json
+```
+
+`platform`、`node`、`npm` 或 `chrome` 检查失败表示运行环境未就绪，先按「环境要求」补齐依赖，工具不会替你安装它们。诊断之外仍然安装失败时，按「机器上装过旧版本」小节的清理命令删除旧安装，再重新执行标准安装路径（下载 tgz → 校验 SHA-256 → 安装）。
 
 安装后推荐使用 `alskai-notebank` 命令。`wechat-notebank` 是兼容旧用法的命令别名，两者调用的是同一个工具。下面继续使用绝对路径，因此即使没有修改 PATH 也能运行：
 
@@ -444,13 +458,7 @@ wechat-notebank fetch <url>
 
 这通常表示旧版本在等待微信页面所有网络请求结束。微信文章里的图片、统计脚本或风控页面可能让页面一直不进入“网络空闲”状态。
 
-先更新到固定版本：
-
-```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
-```
-
-然后重试：
+先按「安装或更新」小节的标准路径更新到固定版本（下载 tgz 和 sha256、校验后从本地 tgz 安装），然后重试：
 
 ```bash
 alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output ~/WeChatArticles
@@ -501,11 +509,7 @@ alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%
 
 ### `npm install -g wechat-notebank` 返回 404
 
-当前包还没有发布到 npm registry。请使用 GitHub 安装：
-
-```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
-```
+当前包还没有发布到 npm registry。请按「安装或更新」小节的标准路径从固定 GitHub Release 安装：先下载 tgz 和 `.sha256` 文件并校验，再从本地 tgz 安装。
 
 ### Windows 里 `~/WeChatArticles` 能用吗？
 
