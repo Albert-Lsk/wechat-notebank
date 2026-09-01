@@ -103,11 +103,16 @@ function parsePackCreateArgs(args) {
     }
     let sourceFile;
     let manifestFile;
+    let dryRun = false;
     let json = false;
     for (let index = 0; index < options.length; index++) {
         const option = options[index];
         if (isJsonOutputOption(option)) {
             json = true;
+            continue;
+        }
+        if (option === '--dry-run') {
+            dryRun = true;
             continue;
         }
         if (option === '--source' || option === '--manifest') {
@@ -132,7 +137,7 @@ function parsePackCreateArgs(args) {
     if (!manifestFile) {
         throw new Error('请提供 --manifest <file>');
     }
-    return { sourceFile, manifestFile, json };
+    return { sourceFile, manifestFile, dryRun, json };
 }
 function parsePackApproveArgs(args) {
     const [operation, packFile, ...options] = args;

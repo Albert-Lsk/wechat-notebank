@@ -60,7 +60,7 @@ async function createPackCommand(args, transactionHooks = {}) {
         if (current.manifest.sourceUrl !== initial.manifest.sourceUrl) {
             throw new command_error_1.CommandError('MANIFEST_INVALID', '源 URL 在获取归档锁期间发生变化');
         }
-        return createPackLocked(sourceFile, current, transactionHooks);
+        return createPackLocked(sourceFile, current, transactionHooks, args.dryRun);
     });
 }
 async function loadPackInputs(sourceFile, manifestFile) {
@@ -90,7 +90,7 @@ async function loadPackInputs(sourceFile, manifestFile) {
     (0, pack_manifest_1.validateQuotes)(manifest.materials, (0, pack_render_1.withoutDerivedRegion)(sourceDocument.content));
     return { sourceContent, sourceDocument, manifest };
 }
-async function createPackLocked(sourceFile, inputs, transactionHooks) {
+async function createPackLocked(sourceFile, inputs, transactionHooks, dryRun) {
     const { sourceContent, sourceDocument, manifest } = inputs;
     const sourceData = sourceDocument.data;
     const processingGoal = (0, pack_manifest_1.normalizeProcessingGoal)(manifest.processingGoal);
@@ -124,7 +124,7 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
             if (!(await fs.pathExists(existing.packFile))) {
                 throw new command_error_1.CommandError('PACK_ALREADY_EXISTS', '加工包状态存在，但可见文件缺失');
             }
-            return {
+            return finalizeResult({
                 action: 'reuse',
                 packId,
                 revision: existing.revision,
@@ -134,7 +134,7 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
                 processingGoal,
                 packFile: existing.packFile,
                 stateFile,
-            };
+            }, dryRun);
         }
     }
     const sourceWikiPath = (0, pack_paths_1.toWikiPath)(vaultRoot, sourceFile);
@@ -208,6 +208,20 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
             expectAbsent: !existing,
         });
         writes.push({ target: sourceFile, content: sourceWithLink });
+        if (dryRun) {
+            // dry-run：与正式创建共用上方全部校验与目标占用检查，仅跳过事务落盘。
+            return finalizeResult({
+                action: existing ? 'revise' : 'create',
+                packId,
+                revision,
+                status: 'pending',
+                sourceFile,
+                sourceUrl: manifest.sourceUrl,
+                processingGoal,
+                packFile,
+                stateFile,
+            }, dryRun);
+        }
         await (0, file_transaction_1.commitFileTransaction)(vaultRoot, writes, transactionHooks);
     }
     catch (error) {
@@ -216,7 +230,7 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
         }
         throw new command_error_1.CommandError('TRANSACTION_FAILED', (0, command_error_1.getErrorMessage)(error));
     }
-    return {
+    return finalizeResult({
         action: existing ? 'revise' : 'create',
         packId,
         revision,
@@ -226,7 +240,10 @@ async function createPackLocked(sourceFile, inputs, transactionHooks) {
         processingGoal,
         packFile,
         stateFile,
-    };
+    }, dryRun);
+}
+function finalizeResult(result, dryRun) {
+    return dryRun ? { ...result, dryRun: true } : result;
 }
 function findVaultRoot(sourceFile) {
     const parsed = path.parse(sourceFile);

@@ -26,6 +26,7 @@ export interface DoctorArgs {
 export interface PackCreateArgs {
   sourceFile: string;
   manifestFile: string;
+  dryRun: boolean;
   json: boolean;
 }
 
@@ -183,11 +184,16 @@ export function parsePackCreateArgs(args: string[]): PackCreateArgs {
 
   let sourceFile: string | undefined;
   let manifestFile: string | undefined;
+  let dryRun = false;
   let json = false;
   for (let index = 0; index < options.length; index++) {
     const option = options[index];
     if (isJsonOutputOption(option)) {
       json = true;
+      continue;
+    }
+    if (option === '--dry-run') {
+      dryRun = true;
       continue;
     }
     if (option === '--source' || option === '--manifest') {
@@ -212,7 +218,7 @@ export function parsePackCreateArgs(args: string[]): PackCreateArgs {
   if (!manifestFile) {
     throw new Error('请提供 --manifest <file>');
   }
-  return { sourceFile, manifestFile, json };
+  return { sourceFile, manifestFile, dryRun, json };
 }
 
 export function parsePackApproveArgs(args: string[]): PackApproveArgs {

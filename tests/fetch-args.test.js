@@ -124,6 +124,25 @@ assert.deepStrictEqual(
   {
     sourceFile: '/tmp/vault/L1_原文/WeChat/source.md',
     manifestFile: '/tmp/manifest.json',
+    dryRun: false,
+    json: true,
+  }
+);
+
+assert.deepStrictEqual(
+  parsePackCreateArgs([
+    'create',
+    '--source',
+    '/tmp/vault/L1_原文/WeChat/source.md',
+    '--manifest',
+    '/tmp/manifest.json',
+    '--dry-run',
+    '--json',
+  ]),
+  {
+    sourceFile: '/tmp/vault/L1_原文/WeChat/source.md',
+    manifestFile: '/tmp/manifest.json',
+    dryRun: true,
     json: true,
   }
 );
