@@ -43,6 +43,7 @@ export interface PackCreateResult {
   processingGoal: string | null;
   packFile: string;
   stateFile: string;
+  dryRun?: true;
 }
 
 export async function createPackCommand(
@@ -60,7 +61,7 @@ export async function createPackCommand(
     if (current.manifest.sourceUrl !== initial.manifest.sourceUrl) {
       throw new CommandError('MANIFEST_INVALID', '源 URL 在获取归档锁期间发生变化');
     }
-    return createPackLocked(sourceFile, current, transactionHooks);
+    return createPackLocked(sourceFile, current, transactionHooks, args.dryRun);
   });
 }
 
@@ -103,7 +104,8 @@ async function loadPackInputs(
 async function createPackLocked(
   sourceFile: string,
   inputs: PackInputs,
-  transactionHooks: FileTransactionHooks
+  transactionHooks: FileTransactionHooks,
+  dryRun: boolean
 ): Promise<PackCreateResult> {
   const { sourceContent, sourceDocument, manifest } = inputs;
   const sourceData = sourceDocument.data as { title?: unknown };
@@ -146,17 +148,20 @@ async function createPackLocked(
       if (!(await fs.pathExists(existing.packFile))) {
         throw new CommandError('PACK_ALREADY_EXISTS', '加工包状态存在，但可见文件缺失');
       }
-      return {
-        action: 'reuse',
-        packId,
-        revision: existing.revision,
-        status: existing.status,
-        sourceFile,
-        sourceUrl: manifest.sourceUrl,
-        processingGoal,
-        packFile: existing.packFile,
-        stateFile,
-      };
+      return finalizeResult(
+        {
+          action: 'reuse',
+          packId,
+          revision: existing.revision,
+          status: existing.status,
+          sourceFile,
+          sourceUrl: manifest.sourceUrl,
+          processingGoal,
+          packFile: existing.packFile,
+          stateFile,
+        },
+        dryRun
+      );
     }
   }
   const sourceWikiPath = toWikiPath(vaultRoot, sourceFile);
@@ -247,6 +252,23 @@ async function createPackLocked(
       expectAbsent: !existing,
     });
     writes.push({ target: sourceFile, content: sourceWithLink });
+    if (dryRun) {
+      // dry-run：与正式创建共用上方全部校验与目标占用检查，仅跳过事务落盘。
+      return finalizeResult(
+        {
+          action: existing ? 'revise' : 'create',
+          packId,
+          revision,
+          status: 'pending',
+          sourceFile,
+          sourceUrl: manifest.sourceUrl,
+          processingGoal,
+          packFile,
+          stateFile,
+        },
+        dryRun
+      );
+    }
     await commitFileTransaction(vaultRoot, writes, transactionHooks);
   } catch (error) {
     if (error instanceof FileTransactionConflictError) {
@@ -255,17 +277,27 @@ async function createPackLocked(
     throw new CommandError('TRANSACTION_FAILED', getErrorMessage(error));
   }
 
-  return {
-    action: existing ? 'revise' : 'create',
-    packId,
-    revision,
-    status: 'pending',
-    sourceFile,
-    sourceUrl: manifest.sourceUrl,
-    processingGoal,
-    packFile,
-    stateFile,
-  };
+  return finalizeResult(
+    {
+      action: existing ? 'revise' : 'create',
+      packId,
+      revision,
+      status: 'pending',
+      sourceFile,
+      sourceUrl: manifest.sourceUrl,
+      processingGoal,
+      packFile,
+      stateFile,
+    },
+    dryRun
+  );
+}
+
+function finalizeResult(
+  result: PackCreateResult,
+  dryRun: boolean
+): PackCreateResult {
+  return dryRun ? { ...result, dryRun: true } : result;
 }
 
 function findVaultRoot(sourceFile: string): string {

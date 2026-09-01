@@ -44,8 +44,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank setup --agents <codex|claude|codex,claude> [--dry-run] [--json]
                                           安装或更新 Agent 集成（macOS Apple Silicon）
   alskai-notebank doctor [--json]          只读诊断环境、配置与加工包完整性
-  alskai-notebank pack create --source <file> --manifest <manifest.json> [--json]
-                                          创建或修订待审核加工包
+  alskai-notebank pack create --source <file> --manifest <manifest.json> [--dry-run] [--json]
+                                          创建或修订待审核加工包（--dry-run 只校验不落盘）
   alskai-notebank pack update <pack> --manifest <manifest.json> [--json]
                                           记录 L4 用户回答与 Agent 整理稿
   alskai-notebank pack approve <pack> --items <ids> [--json]
@@ -293,11 +293,15 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
           command: 'pack.create',
           status: result.action === 'reuse'
             ? 'unchanged'
-            : result.action === 'revise'
-              ? 'revised'
-              : 'created',
+            : packArgs.dryRun
+              ? 'planned'
+              : result.action === 'revise'
+                ? 'revised'
+                : 'created',
           result,
         });
+      } else if (packArgs.dryRun) {
+        console.log(`✅ 校验通过（dry-run 预演，未写入磁盘）: ${result.packFile}`);
       } else {
         console.log(`✅ 待审核加工包已创建: ${result.packFile}`);
       }
