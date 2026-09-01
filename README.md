@@ -485,11 +485,14 @@ alskai-notebank import ./articles.xlsx
 ```text
 your-knowledge-base/
 ├── L1_原文/
-│   └── WeChat/
-│       └── 文章原文.md
-├── L2_原子卡片/
-├── L3_引用素材/
-└── L4_阅读复盘/
+│   └── WeChat/                                <-- fetch 的 --output 指向这里
+│       └── 2026-04-13-文章标题.md              <-- fetch 时写入
+├── Inbox/
+│   └── 文章标题-packId前12位-r1.md             <-- pack create 时生成
+├── L2_原子卡片/                                <-- pack approve 发布候选时生成
+├── L3_引用素材/                                <-- pack approve 发布候选时生成
+├── L4_阅读复盘/                                <-- pack approve 发布候选时生成
+└── .alskai-notebank/                          <-- 隐藏状态区，第一条加工命令时生成
 ```
 
 四层含义：
@@ -502,6 +505,26 @@ your-knowledge-base/
 | L4 | 阅读复盘 | 写下自己的理解、问题和行动 |
 
 这个结构不是强制的。你也可以用任意目录保存文章。
+
+### `--output` 指向哪里
+
+`fetch` 的 `--output`（简写 `-o`）指向文章归档目标目录，也就是 L1 层目录本身，例如 `<知识库根>/L1_原文/WeChat`。它与 `init` 配置的 `archivePath` 同义：命令里传了 `--output` 时优先使用命令值，否则使用配置值。文章 Markdown 会直接写入该目录，工具不会自动追加子目录：
+
+```bash
+alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" \
+  --output ~/WeChatArticles/L1_原文/WeChat
+```
+
+四类目录的生成时机：
+
+| 目录 | 生成时机 |
+|------|----------|
+| L1 归档目录（`--output` / `archivePath` 指向的目录） | `fetch` 执行时创建，文章原文直接写入其中 |
+| `Inbox/` | 第一条 `pack create` 执行时，在知识库根目录生成 |
+| `L2_原子卡片/`、`L3_引用素材/`、`L4_阅读复盘/` | 第一次 `pack approve` 发布候选时生成 |
+| `.alskai-notebank/`（隐藏状态区） | 第一条加工命令（`pack create`）执行时生成，保存加工包状态、revision 快照和聚合哈希 |
+
+知识库根目录是 `L1_原文` 的上一级目录，`pack` 系列命令会根据原文路径自动定位它，`Inbox`、L2-L4 和隐藏状态区都生成在这里。只执行 `fetch` 不会创建 `Inbox`、L2-L4 或 `.alskai-notebank/`；`fetch` 期间出现的 `.alskai-notebank-locks` 是临时归档锁目录，命令结束后会自动清理。用 `init` 引导初始化时，四层骨架目录会一次性预建。
 
 ## 配置文件
 
