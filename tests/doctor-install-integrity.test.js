@@ -114,4 +114,24 @@ assert.deepStrictEqual(
   'doctor must stay read-only on the install root'
 );
 
+const missingBinSandbox = prepareSandbox('doctor-install-missing-bin');
+const missingBinInstallRoot = createInstallRoot(missingBinSandbox.root, { withBin: false });
+const missingBin = runDoctor(missingBinSandbox, missingBinInstallRoot);
+assert.strictEqual(
+  missingBin.status,
+  1,
+  `half-installed CLI must fail doctor: ${missingBin.stdout}`
+);
+const missingBinOutput = JSON.parse(missingBin.stdout);
+assert.strictEqual(missingBinOutput.ok, false);
+const missingBinCheck = missingBinOutput.result.checks.find(
+  (candidate) => candidate.id === 'install'
+);
+assert.ok(missingBinCheck, '--json output must include the install check');
+assert.strictEqual(missingBinCheck.status, 'failed');
+assert.match(missingBinCheck.message, /dist[\\/]index\.js/);
+assert.match(missingBinCheck.message, /README/);
+assert.match(missingBinCheck.message, /清理/);
+assert.match(missingBinCheck.message, /npm install -g/);
+
 console.log('doctor install integrity tests passed');

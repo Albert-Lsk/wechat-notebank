@@ -99,10 +99,35 @@ async function checkClaudeCommand(homePath: string): Promise<DoctorCheck> {
     };
 }
 
+function reinstallGuidance(detail: string): string {
+  return (
+    `安装不完整：${detail}。请先清理当前损坏的安装，再按 README「安装或更新」的` +
+    '标准安装序列重新安装固定 Release' +
+    '（npm install -g --prefix "$HOME/.local" <固定 Release tgz> --force），' +
+    '完成后重新运行 doctor --json 复检'
+  );
+}
+
 async function checkInstallIntegrity(
   installRoot: string,
   cliVersion: string
 ): Promise<DoctorCheck> {
+  const packageJson = await fs.readJson(
+    path.join(installRoot, 'package.json')
+  ) as {
+    bin?: Record<string, string>;
+  };
+  for (const binName of Object.keys(packageJson.bin || {})) {
+    const binPath = packageJson.bin![binName];
+    const entryPath = path.join(installRoot, binPath);
+    if (!(await fs.pathExists(entryPath))) {
+      return {
+        id: 'install',
+        status: 'failed',
+        message: reinstallGuidance(`缺少可执行入口 ${entryPath}（bin ${binName}）`),
+      };
+    }
+  }
   return {
     id: 'install',
     status: 'passed',
