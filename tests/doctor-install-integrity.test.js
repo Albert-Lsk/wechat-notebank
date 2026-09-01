@@ -134,4 +134,33 @@ assert.match(missingBinCheck.message, /README/);
 assert.match(missingBinCheck.message, /清理/);
 assert.match(missingBinCheck.message, /npm install -g/);
 
+function assertFailedInstallCheck(result, label) {
+  assert.strictEqual(result.status, 1, `${label}: ${result.stdout}`);
+  const output = JSON.parse(result.stdout);
+  const check = output.result.checks.find((candidate) => candidate.id === 'install');
+  assert.ok(check, `${label}: --json output must include the install check`);
+  assert.strictEqual(check.status, 'failed');
+  assert.match(check.message, /README/);
+  assert.match(check.message, /清理/);
+  assert.match(check.message, /npm install -g/);
+  return check;
+}
+
+const emptyVersionSandbox = prepareSandbox('doctor-install-empty-version');
+const emptyVersionInstallRoot = createInstallRoot(emptyVersionSandbox.root, { version: '' });
+const emptyVersionCheck = assertFailedInstallCheck(
+  runDoctor(emptyVersionSandbox, emptyVersionInstallRoot),
+  'empty version'
+);
+assert.match(emptyVersionCheck.message, /version/);
+
+const missingManifestSandbox = prepareSandbox('doctor-install-missing-manifest');
+const missingManifestInstallRoot = createInstallRoot(missingManifestSandbox.root, {
+  version: null,
+});
+assertFailedInstallCheck(
+  runDoctor(missingManifestSandbox, missingManifestInstallRoot),
+  'missing package.json'
+);
+
 console.log('doctor install integrity tests passed');

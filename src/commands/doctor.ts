@@ -112,11 +112,27 @@ async function checkInstallIntegrity(
   installRoot: string,
   cliVersion: string
 ): Promise<DoctorCheck> {
-  const packageJson = await fs.readJson(
-    path.join(installRoot, 'package.json')
-  ) as {
-    bin?: Record<string, string>;
-  };
+  let packageJson: { bin?: Record<string, string>; version?: string };
+  try {
+    packageJson = await fs.readJson(path.join(installRoot, 'package.json'));
+  } catch {
+    return {
+      id: 'install',
+      status: 'failed',
+      message: reinstallGuidance(
+        `安装目录缺少可读的 package.json：${path.join(installRoot, 'package.json')}`
+      ),
+    };
+  }
+  if (!packageJson.version) {
+    return {
+      id: 'install',
+      status: 'failed',
+      message: reinstallGuidance(
+        `安装目录 ${installRoot} 的 package.json 缺少 version 字段`
+      ),
+    };
+  }
   for (const binName of Object.keys(packageJson.bin || {})) {
     const binPath = packageJson.bin![binName];
     const entryPath = path.join(installRoot, binPath);
