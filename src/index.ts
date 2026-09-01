@@ -27,6 +27,7 @@ import {
 } from './lib/cli';
 import { writeJsonOutput } from './lib/command-output';
 import { CommandError, getErrorMessage } from './lib/command-error';
+import { getPackageVersion } from './lib/package-info';
 
 async function main() {
   const normalized = normalizeCliArgs(process.argv.slice(2));
@@ -58,6 +59,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                                           存档文章
   alskai-notebank import <Excel文件地址> [--json]
                                           批量导入文章
+  alskai-notebank --version               显示版本号
 
 兼容命令:
   wechat-notebank fetch <url> [--output <folder>] [--json]
@@ -80,6 +82,24 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
 首次使用会自动引导初始化设置。
     `);
+    return;
+  }
+
+  // 版本信息
+  if (command === '--version') {
+    const version = await getPackageVersion();
+    if (isJsonOutputRequested(args)) {
+      writeJsonOutput({
+        ok: true,
+        command: 'version',
+        status: 'ok',
+        result: {
+          version,
+        },
+      });
+    } else {
+      console.log(version);
+    }
     return;
   }
 
