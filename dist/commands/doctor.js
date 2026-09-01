@@ -57,6 +57,8 @@ async function doctorCommand() {
         status: 'passed',
         message: `CLI ${version}`,
     });
+    const installRoot = process.env.WECHAT_NOTEBANK_INSTALL_ROOT || (0, package_info_1.getPackageRoot)();
+    checks.push(await checkInstallIntegrity(installRoot, version));
     const homePath = process.env.HOME || os.homedir();
     checks.push(await checkSkill(homePath, 'codex', version));
     checks.push(await checkSkill(homePath, 'claude', version));
@@ -103,6 +105,55 @@ async function checkClaudeCommand(homePath) {
             status: 'warning',
             message: 'Claude Code 斜杠命令与当前 CLI 版本不一致',
         };
+}
+function reinstallGuidance(detail) {
+    return (`安装不完整：${detail}。请先清理当前损坏的安装，再按 README「安装或更新」的` +
+        '标准安装序列重新安装固定 Release' +
+        '（npm install -g --prefix "$HOME/.local" <固定 Release tgz> --force），' +
+        '完成后重新运行 doctor --json 复检');
+}
+async function checkInstallIntegrity(installRoot, cliVersion) {
+    let packageJson;
+    try {
+        packageJson = await fs.readJson(path.join(installRoot, 'package.json'));
+    }
+    catch {
+        return {
+            id: 'install',
+            status: 'failed',
+            message: reinstallGuidance(`安装目录缺少可读的 package.json：${path.join(installRoot, 'package.json')}`),
+        };
+    }
+    if (!packageJson.version) {
+        return {
+            id: 'install',
+            status: 'failed',
+            message: reinstallGuidance(`安装目录 ${installRoot} 的 package.json 缺少 version 字段`),
+        };
+    }
+    if (packageJson.version !== cliVersion) {
+        return {
+            id: 'install',
+            status: 'failed',
+            message: reinstallGuidance(`安装版本 ${packageJson.version} 与 CLI 版本 ${cliVersion} 不一致`),
+        };
+    }
+    for (const binName of Object.keys(packageJson.bin || {})) {
+        const binPath = packageJson.bin[binName];
+        const entryPath = path.join(installRoot, binPath);
+        if (!(await fs.pathExists(entryPath))) {
+            return {
+                id: 'install',
+                status: 'failed',
+                message: reinstallGuidance(`缺少可执行入口 ${entryPath}（bin ${binName}）`),
+            };
+        }
+    }
+    return {
+        id: 'install',
+        status: 'passed',
+        message: `安装完整 ${cliVersion}`,
+    };
 }
 function checkPlatform() {
     const platform = (0, environment_1.inspectPlatform)();

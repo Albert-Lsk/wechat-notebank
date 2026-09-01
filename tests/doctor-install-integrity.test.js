@@ -163,4 +163,16 @@ assertFailedInstallCheck(
   'missing package.json'
 );
 
+const mismatchedVersion = '9.9.9';
+const mismatchSandbox = prepareSandbox('doctor-install-version-mismatch');
+const mismatchInstallRoot = createInstallRoot(mismatchSandbox.root, {
+  version: mismatchedVersion,
+});
+const mismatchCheck = assertFailedInstallCheck(
+  runDoctor(mismatchSandbox, mismatchInstallRoot),
+  'version mismatch'
+);
+assert.match(mismatchCheck.message, new RegExp(mismatchedVersion));
+assert.match(mismatchCheck.message, new RegExp(cliVersion.replace(/\./g, '\\.')));
+
 console.log('doctor install integrity tests passed');

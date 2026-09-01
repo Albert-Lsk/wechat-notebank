@@ -133,6 +133,15 @@ async function checkInstallIntegrity(
       ),
     };
   }
+  if (packageJson.version !== cliVersion) {
+    return {
+      id: 'install',
+      status: 'failed',
+      message: reinstallGuidance(
+        `安装版本 ${packageJson.version} 与 CLI 版本 ${cliVersion} 不一致`
+      ),
+    };
+  }
   for (const binName of Object.keys(packageJson.bin || {})) {
     const binPath = packageJson.bin![binName];
     const entryPath = path.join(installRoot, binPath);
