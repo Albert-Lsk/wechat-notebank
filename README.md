@@ -211,6 +211,7 @@ $HOME\WeChatArticles
 | `alskai-notebank setup --agents <targets> [--dry-run] --json` | 安装或更新指定 Agent 集成 |
 | `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill、配置与加工包完整性 |
 | `alskai-notebank pack create --source <file> --manifest <manifest.json> --json` | 创建或修订待审核加工包 |
+| `alskai-notebank pack create --source <file> --manifest <manifest.json> --dry-run` | 只校验 Manifest，不落盘（预演，磁盘零变化） |
 | `alskai-notebank pack update <pack> --manifest <manifest.json> --json` | 记录 L4 用户原话与 Agent 整理稿 |
 | `alskai-notebank pack approve <pack> --items <ids> --json` | 选择性审批并发布 L2/L3/L4 候选 |
 | `alskai-notebank pack reject <pack> --json` | 拒绝尚未完成审批的加工包 |

@@ -15,6 +15,7 @@ const config_1 = require("./lib/config");
 const cli_1 = require("./lib/cli");
 const command_output_1 = require("./lib/command-output");
 const command_error_1 = require("./lib/command-error");
+const package_info_1 = require("./lib/package-info");
 async function main() {
     const normalized = (0, cli_1.normalizeCliArgs)(process.argv.slice(2));
     const { command, args } = normalized;
@@ -44,6 +45,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                                           存档文章
   alskai-notebank import <Excel文件地址> [--json]
                                           批量导入文章
+  alskai-notebank --version               显示版本号
 
 兼容命令:
   wechat-notebank fetch <url> [--output <folder>] [--json]
@@ -66,6 +68,24 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
 
 首次使用会自动引导初始化设置。
     `);
+        return;
+    }
+    // 版本信息
+    if (command === '--version') {
+        const version = await (0, package_info_1.getPackageVersion)();
+        if ((0, cli_1.isJsonOutputRequested)(args)) {
+            (0, command_output_1.writeJsonOutput)({
+                ok: true,
+                command: 'version',
+                status: 'ok',
+                result: {
+                    version,
+                },
+            });
+        }
+        else {
+            console.log(version);
+        }
         return;
     }
     // 初始化命令
