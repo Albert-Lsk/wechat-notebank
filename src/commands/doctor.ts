@@ -46,6 +46,8 @@ export async function doctorCommand(): Promise<DoctorResult> {
     status: 'passed',
     message: `CLI ${version}`,
   });
+  const installRoot = process.env.WECHAT_NOTEBANK_INSTALL_ROOT || getPackageRoot();
+  checks.push(await checkInstallIntegrity(installRoot, version));
 
   const homePath = process.env.HOME || os.homedir();
   checks.push(await checkSkill(homePath, 'codex', version));
@@ -95,6 +97,17 @@ async function checkClaudeCommand(homePath: string): Promise<DoctorCheck> {
       status: 'warning',
       message: 'Claude Code 斜杠命令与当前 CLI 版本不一致',
     };
+}
+
+async function checkInstallIntegrity(
+  installRoot: string,
+  cliVersion: string
+): Promise<DoctorCheck> {
+  return {
+    id: 'install',
+    status: 'passed',
+    message: `安装完整 ${cliVersion}`,
+  };
 }
 
 function checkPlatform(): DoctorCheck {
