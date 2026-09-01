@@ -14,8 +14,9 @@ assert.strictEqual(packageLock.packages[''].version, packageJson.version);
 assert.match(readme, new RegExp(releaseAssetUrl.replaceAll('.', '\\.')));
 assert.match(
   readme,
-  /npm install -g --prefix "\$HOME\/\.local"[^\n]*wechat-notebank-0\.2\.0\.tgz[^\n]*--force/
+  /npm install -g --prefix "\$HOME\/\.local" \.\/wechat-notebank-0\.2\.0\.tgz/
 );
+assert.doesNotMatch(readme, /install[^\n]*--force/);
 assert.doesNotMatch(
   readme,
   /npm install -g (?!--prefix "\$HOME\/\.local")[^\n]*wechat-notebank-0\.2\.0\.tgz/

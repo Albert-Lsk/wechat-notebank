@@ -87,20 +87,13 @@ export WECHAT_NOTEBANK_CHROME_PATH="/Applications/Google Chrome.app/Contents/Mac
 
 首版 Agent 自助安装支持 macOS Apple Silicon。运行依赖 Node.js 20+、npm 和 Google Chrome；工具会诊断这些依赖，但不会替你安装它们。
 
-安装固定的 GitHub Release 标签，避免使用持续变化的开发分支：
-
-```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
-ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
-```
-
-Release 同时提供 SHA-256 文件。需要在安装前校验时，先下载两个资产：
+安装固定的 GitHub Release 标签，避免使用持续变化的开发分支。标准安装路径是：下载 Release 资产，校验 SHA-256，再从本地 tgz 安装：
 
 ```bash
 curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz
 curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz.sha256
 shasum -a 256 -c wechat-notebank-0.2.0.tgz.sha256
-npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.2.0.tgz --force
+npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.2.0.tgz
 ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 ```
 
@@ -114,11 +107,32 @@ ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 
 只使用 Codex 时传 `codex`，只使用 Claude Code 时传 `claude`。`setup` 会安装当前包附带的 Skill；Claude Code 还会安装 `/alskai-notebank` 命令。已有文件更新前会备份，失败时会恢复，重复执行不会重复改写相同版本。成功后请重启 Codex 或 Claude Code，让当前会话重新发现 Skill。
 
+### 机器上装过旧版本
+
+这台机器装过旧版本时，先显式清理，再执行上面的标准安装路径：
+
+```bash
+rm -rf "$HOME/.local/lib/node_modules/wechat-notebank"
+rm -f "$HOME/.local/bin/alskai-notebank" "$HOME/.local/bin/wechat-notebank"
+```
+
+第一条命令删除旧版本安装在 `~/.local` 下的 `node_modules` 目录，第二条删除 `alskai-notebank` 和 `wechat-notebank` 两个旧入口文件。标准安装命令不带 `--force`：旧版本残留会让 `npm install` 在冲突时大声失败并整体退出，而不是安静地装一半；先清理再安装，得到的结果才是完整、可校验的。
+
 你也可以把下面这段原样发给具备终端权限的 Agent：
 
 ```text
-请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.2.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
+请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.2.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。安装完成后需要重启 Agent 会话，Skill 才会被发现（setup 成功时会返回 restartRequired: true）。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
 ```
+
+### 安装排障
+
+安装或 `setup` 失败时，先运行只读诊断，按失败的检查项定位原因：
+
+```bash
+"$ALSKAI_NOTEBANK" doctor --json
+```
+
+`platform`、`node`、`npm` 或 `chrome` 检查失败表示运行环境未就绪，先按「环境要求」补齐依赖，工具不会替你安装它们。诊断之外仍然安装失败时，按「机器上装过旧版本」小节的清理命令删除旧安装，再重新执行标准安装路径（下载 tgz → 校验 SHA-256 → 安装）。
 
 安装后推荐使用 `alskai-notebank` 命令。`wechat-notebank` 是兼容旧用法的命令别名，两者调用的是同一个工具。下面继续使用绝对路径，因此即使没有修改 PATH 也能运行：
 
@@ -300,6 +314,108 @@ alskai-notebank pack revoke \
 
 `doctor --json` 会只读报告生成文件缺失、哈希漂移、双链断裂、隐藏状态缺失，以及当前状态与 revision 快照不一致；它不会自动删除、改写或修复知识库。
 
+## Manifest v1 规范
+
+`pack create` 和 `pack update` 读取的 Manifest 是一份 JSON 文件。校验器对字段、类型和取值做确定性检查，任何一项不满足都会拒收整份 Manifest。
+
+### 顶层字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `schemaVersion` | number | 是 | 固定为 `1`，其他值会被拒收 |
+| `sourceFile` | string | 是 | 原文 Markdown 的绝对路径，必须与命令的 `--source` 参数解析后一致 |
+| `sourceUrl` | string | 是 | 非空字符串，必须与原文 Frontmatter 的 `sourceUrl` 一致 |
+| `processingGoal` | string \| null | 是 | 加工目标；传 `null` 表示通用加工，同一来源不同目标会生成不同加工包 |
+| `atomicNotes` | array | 是 | L2 候选数组，可为空，最多 99 项 |
+| `materials` | array | 是 | L3 候选数组，可为空，最多 99 项 |
+| `reviewQuestions` | array | 是 | L4 问题数组，可为空，最多 99 项 |
+
+顶层不允许出现上述之外的字段；候选对象同样只接受各自表内列出的字段。
+
+### L2 `atomicNotes` 候选
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 按数组顺序固定为 `L2-01`、`L2-02`…，且不能重复 |
+| `title` | string | 是 | 非空卡片标题 |
+| `claim` | string | 是 | 非空，一句话观点 |
+| `evidence` | string | 是 | 非空，来自原文的支撑证据 |
+| `boundary` | string | 是 | 非空，适用边界 |
+| `useCases` | string[] | 是 | 非空字符串数组，可复用的场景 |
+
+### L3 `materials` 候选
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 按数组顺序固定为 `L3-01`、`L3-02`…，且不能重复 |
+| `kind` | string | 是 | 只接受 `quote`、`paraphrase`、`case`、`data` |
+| `title` | string | 是 | 非空素材标题 |
+| `content` | string | 是 | 非空；`kind` 为 `quote` 时必须原文精确命中，见下文 |
+| `sourceSection` | string | 是 | 非空，素材在原文中的出处小节 |
+
+### L4 `reviewQuestions` 候选
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `id` | string | 是 | 按数组顺序固定为 `L4-Q01`、`L4-Q02`…，且不能重复 |
+| `question` | string | 是 | 非空，向用户提出的问题 |
+
+### 完整示例
+
+下面这份示例可以直接复制保存为 `manifest.json`，能通过校验器校验（`sourceFile` 换成你机器上的原文路径，`sourceUrl` 与原文 Frontmatter 保持一致）：
+
+```json
+{
+  "schemaVersion": 1,
+  "sourceFile": "/Users/you/WeChatArticles/L1_原文/WeChat/2026-04-13-5种Obsidian知识库架构对比.md",
+  "sourceUrl": "https://mp.weixin.qq.com/s/abcDef123",
+  "processingGoal": "提炼可复用的知识库搭建方法",
+  "atomicNotes": [
+    {
+      "id": "L2-01",
+      "title": "知识库先定结构，再选工具",
+      "claim": "先确定四层结构，再挑选承载工具，日后迁移的成本才可控。",
+      "evidence": "文章用同一套四层结构对比了五种主流工具的迁移路径。",
+      "boundary": "只适用于个人知识库，不涉及团队协作场景。",
+      "useCases": ["搭建个人知识库", "评估笔记工具"]
+    }
+  ],
+  "materials": [
+    {
+      "id": "L3-01",
+      "kind": "quote",
+      "title": "结构先于工具",
+      "content": "结构先于工具：先确定知识要怎么分层，再去挑选承载它的软件。",
+      "sourceSection": "第二节：为什么结构先于工具"
+    }
+  ],
+  "reviewQuestions": [
+    {
+      "id": "L4-Q01",
+      "question": "你现在的知识库缺了哪一层，打算怎么补？"
+    }
+  ]
+}
+```
+
+### quote 引用必须原文精确命中
+
+`kind` 为 `quote` 的 L3 候选，`content` 必须能在原文正文中一字不差地找到（校验时会排除原文里的加工包双链衍生区）。校验器会拒收未命中的引用，`pack create --json` 的报错形态如下：
+
+```json
+{
+  "ok": false,
+  "command": "pack.create",
+  "status": "failed",
+  "error": {
+    "code": "QUOTE_NOT_FOUND",
+    "message": "直接引用 L3-01 未在原文中精确命中"
+  }
+}
+```
+
+`paraphrase`、`case`、`data` 三种类型不做精确命中校验，但内容仍应能对应到 `sourceSection` 指向的原文位置。
+
 ## 输出文件
 
 保存后的文件名格式：
@@ -369,11 +485,14 @@ alskai-notebank import ./articles.xlsx
 ```text
 your-knowledge-base/
 ├── L1_原文/
-│   └── WeChat/
-│       └── 文章原文.md
-├── L2_原子卡片/
-├── L3_引用素材/
-└── L4_阅读复盘/
+│   └── WeChat/                                <-- fetch 的 --output 指向这里
+│       └── 2026-04-13-文章标题.md              <-- fetch 时写入
+├── Inbox/
+│   └── 文章标题-packId前12位-r1.md             <-- pack create 时生成
+├── L2_原子卡片/                                <-- pack approve 发布候选时生成
+├── L3_引用素材/                                <-- pack approve 发布候选时生成
+├── L4_阅读复盘/                                <-- pack approve 发布候选时生成
+└── .alskai-notebank/                          <-- 隐藏状态区，第一条加工命令时生成
 ```
 
 四层含义：
@@ -386,6 +505,26 @@ your-knowledge-base/
 | L4 | 阅读复盘 | 写下自己的理解、问题和行动 |
 
 这个结构不是强制的。你也可以用任意目录保存文章。
+
+### `--output` 指向哪里
+
+`fetch` 的 `--output`（简写 `-o`）指向文章归档目标目录，也就是 L1 层目录本身，例如 `<知识库根>/L1_原文/WeChat`。它与 `init` 配置的 `archivePath` 同义：命令里传了 `--output` 时优先使用命令值，否则使用配置值。文章 Markdown 会直接写入该目录，工具不会自动追加子目录：
+
+```bash
+alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" \
+  --output ~/WeChatArticles/L1_原文/WeChat
+```
+
+四类目录的生成时机：
+
+| 目录 | 生成时机 |
+|------|----------|
+| L1 归档目录（`--output` / `archivePath` 指向的目录） | `fetch` 执行时创建，文章原文直接写入其中 |
+| `Inbox/` | 第一条 `pack create` 执行时，在知识库根目录生成 |
+| `L2_原子卡片/`、`L3_引用素材/`、`L4_阅读复盘/` | 第一次 `pack approve` 发布候选时生成 |
+| `.alskai-notebank/`（隐藏状态区） | 第一条加工命令（`pack create`）执行时生成，保存加工包状态、revision 快照和聚合哈希 |
+
+知识库根目录是 `L1_原文` 的上一级目录，`pack` 系列命令会根据原文路径自动定位它，`Inbox`、L2-L4 和隐藏状态区都生成在这里。只执行 `fetch` 不会创建 `Inbox`、L2-L4 或 `.alskai-notebank/`；`fetch` 期间出现的 `.alskai-notebank-locks` 是临时归档锁目录，命令结束后会自动清理。用 `init` 引导初始化时，四层骨架目录会一次性预建。
 
 ## 配置文件
 
@@ -444,13 +583,7 @@ wechat-notebank fetch <url>
 
 这通常表示旧版本在等待微信页面所有网络请求结束。微信文章里的图片、统计脚本或风控页面可能让页面一直不进入“网络空闲”状态。
 
-先更新到固定版本：
-
-```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
-```
-
-然后重试：
+先按「安装或更新」小节的标准路径更新到固定版本（下载 tgz 和 sha256、校验后从本地 tgz 安装），然后重试：
 
 ```bash
 alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output ~/WeChatArticles
@@ -501,11 +634,7 @@ alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%
 
 ### `npm install -g wechat-notebank` 返回 404
 
-当前包还没有发布到 npm registry。请使用 GitHub 安装：
-
-```bash
-npm install -g --prefix "$HOME/.local" https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.2.0/wechat-notebank-0.2.0.tgz --force
-```
+当前包还没有发布到 npm registry。请按「安装或更新」小节的标准路径从固定 GitHub Release 安装：先下载 tgz 和 `.sha256` 文件并校验，再从本地 tgz 安装。
 
 ### Windows 里 `~/WeChatArticles` 能用吗？
 
