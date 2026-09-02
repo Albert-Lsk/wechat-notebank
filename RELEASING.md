@@ -2,12 +2,12 @@
 
 本项目通过 GitHub Release 附件发布，不发布到 npm registry。用户安装的是经过边界校验的 npm `.tgz`，不要使用 GitHub 自动生成的 `Source code (zip)` 或 `Source code (tar.gz)` 作为安装源。
 
-## v0.3.0 发布前提
+## v0.3.1 发布前提
 
 - 发布提交已经进入 `main`，本地工作区干净且与 `origin/main` 一致。
-- `package.json`、`package-lock.json`、README 固定安装 URL 和计划创建的 Tag 都是 `0.3.0` / `v0.3.0`。
+- `package.json`、`package-lock.json`、README 固定安装 URL 和计划创建的 Tag 都是 `0.3.1` / `v0.3.1`。
 - 发布机器已安装 Node.js 20+、npm 和 Google Chrome；需要执行 Agent 安装验收时，使用 macOS Apple Silicon。
-- v0.3.0 的文章发现、图片本地化和 Markdown 转换实现已经完成评审；发布前必须确认离线测试与发布包清单检查通过。
+- v0.3.0 的文章发现、图片本地化和 Markdown 转换已在上一版完成评审；v0.3.1 为维护版本（安装可靠性与首次体验修复，见 #26/#27-#32）。发布前必须确认离线测试与发布包清单检查通过。
 
 ## 发布前真实网络手工验证
 
@@ -39,14 +39,14 @@
 npm ci
 npm test
 npm run release:pack
-(cd release && shasum -a 256 -c wechat-notebank-0.3.0.tgz.sha256)
+(cd release && shasum -a 256 -c wechat-notebank-0.3.1.tgz.sha256)
 ```
 
 `npm run release:pack` 会重新构建 CLI，生成以下两个文件：
 
 ```text
-release/wechat-notebank-0.3.0.tgz
-release/wechat-notebank-0.3.0.tgz.sha256
+release/wechat-notebank-0.3.1.tgz
+release/wechat-notebank-0.3.1.tgz.sha256
 ```
 
 发布验收需要连续执行两次 `npm run release:pack` 并比较两个 `.sha256` 文件的 SHA-256；
@@ -59,12 +59,12 @@ release/wechat-notebank-0.3.0.tgz.sha256
 只有在维护者明确授权发布后才执行：
 
 ```bash
-git tag -a v0.3.0 -m "发布 v0.3.0"
-git push origin v0.3.0
-gh release create v0.3.0 \
-  release/wechat-notebank-0.3.0.tgz \
-  release/wechat-notebank-0.3.0.tgz.sha256 \
-  --title "wechat-notebank v0.3.0" \
+git tag -a v0.3.1 -m "发布 v0.3.1"
+git push origin v0.3.1
+gh release create v0.3.1 \
+  release/wechat-notebank-0.3.1.tgz \
+  release/wechat-notebank-0.3.1.tgz.sha256 \
+  --title "wechat-notebank v0.3.1" \
   --notes-from-tag \
   --verify-tag
 ```
@@ -72,7 +72,7 @@ gh release create v0.3.0 \
 创建完成后，确认 GitHub Release 中两个附件都可下载，并核对 README 的固定安装地址：
 
 ```text
-https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.0/wechat-notebank-0.3.0.tgz
+https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz
 ```
 
 不执行 `npm publish`，也不创建浮动 `latest` 下载地址。发现资产或文档不一致时停止发布，

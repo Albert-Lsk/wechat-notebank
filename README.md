@@ -91,10 +91,10 @@ export WECHAT_NOTEBANK_CHROME_PATH="/Applications/Google Chrome.app/Contents/Mac
 安装固定的 GitHub Release 标签，避免使用持续变化的开发分支。标准安装路径是：下载 Release 资产，校验 SHA-256，再从本地 tgz 安装：
 
 ```bash
-curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.0/wechat-notebank-0.3.0.tgz
-curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.0/wechat-notebank-0.3.0.tgz.sha256
-shasum -a 256 -c wechat-notebank-0.3.0.tgz.sha256
-npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.3.0.tgz
+curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz
+curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz.sha256
+shasum -a 256 -c wechat-notebank-0.3.1.tgz.sha256
+npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.3.1.tgz
 ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 ```
 
@@ -122,7 +122,7 @@ rm -f "$HOME/.local/bin/alskai-notebank" "$HOME/.local/bin/wechat-notebank"
 你也可以把下面这段原样发给具备终端权限的 Agent：
 
 ```text
-请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.3.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。安装完成后需要重启 Agent 会话，Skill 才会被发现（setup 成功时会返回 restartRequired: true）。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
+请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.3.1 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。安装完成后需要重启 Agent 会话，Skill 才会被发现（setup 成功时会返回 restartRequired: true）。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
 ```
 
 ### 安装排障
