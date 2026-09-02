@@ -5,6 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
+const { version } = require('../package.json');
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'notebank-release-build-'));
 
 function buildRelease(folderName) {
@@ -26,10 +27,10 @@ const second = buildRelease('second');
 
 assert.strictEqual(first.ok, true);
 assert.strictEqual(first.action, 'release-pack');
-assert.strictEqual(first.version, '0.2.0');
-assert.strictEqual(first.tag, 'v0.2.0');
-assert.strictEqual(first.asset, 'wechat-notebank-0.2.0.tgz');
-assert.strictEqual(first.checksum, 'wechat-notebank-0.2.0.tgz.sha256');
+assert.strictEqual(first.version, version);
+assert.strictEqual(first.tag, `v${version}`);
+assert.strictEqual(first.asset, `wechat-notebank-${version}.tgz`);
+assert.strictEqual(first.checksum, `wechat-notebank-${version}.tgz.sha256`);
 assert.match(first.sha256, /^[a-f0-9]{64}$/);
 assert.strictEqual(second.sha256, first.sha256);
 

@@ -13,7 +13,7 @@ const assetUrl = `https://github.com/Albert-Lsk/wechat-notebank/releases/downloa
 assert.match(releasing, /npm ci/);
 assert.match(releasing, /npm test/);
 assert.match(releasing, /npm run release:pack/);
-assert.match(releasing, /\(cd release && shasum -a 256 -c wechat-notebank-0\.2\.0\.tgz\.sha256\)/);
+assert.match(releasing, new RegExp(`\\(cd release && shasum -a 256 -c ${asset.replaceAll('.', '\\.')}\\.sha256\\)`));
 assert.match(releasing, new RegExp(`release/${asset.replaceAll('.', '\\.')}`));
 assert.match(releasing, new RegExp(`${asset.replaceAll('.', '\\.')}\\.sha256`));
 assert.match(releasing, new RegExp(`gh release create ${tag.replaceAll('.', '\\.')}`));

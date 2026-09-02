@@ -11,7 +11,9 @@ export type CommandErrorCode =
   | 'QUOTE_NOT_FOUND'
   | 'PACK_ALREADY_EXISTS'
   | 'DERIVED_FILE_MODIFIED'
-  | 'TRANSACTION_FAILED';
+  | 'TRANSACTION_FAILED'
+  | 'SOGOU_CAPTCHA'
+  | 'SEARCH_UNAVAILABLE';
 
 export class CommandError extends Error {
   constructor(

@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const init_1 = require("./commands/init");
 const fetch_1 = require("./commands/fetch");
 const import_1 = require("./commands/import");
+const search_1 = require("./commands/search");
 const setup_1 = require("./commands/setup");
 const doctor_1 = require("./commands/doctor");
 const pack_1 = require("./commands/pack");
@@ -41,16 +42,18 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                                           拒绝待审核加工包
   alskai-notebank pack revoke <pack> --items <ids> [--json]
                                           撤销已发布的候选内容
-  alskai-notebank <url> [--output <folder>] [--json]
+  alskai-notebank <url> [--output <folder>] [--no-images] [--json]
                                           存档文章
-  alskai-notebank import <Excel文件地址> [--json]
+  alskai-notebank import <Excel文件地址> [--no-images] [--json]
                                           批量导入文章
   alskai-notebank --version               显示版本号
+  alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--limit N] [--account <name>] [--json]
+                                          发现文章（搜狗最近文章 / 今天看啥完整历史）
 
 兼容命令:
-  wechat-notebank fetch <url> [--output <folder>] [--json]
+  wechat-notebank fetch <url> [--output <folder>] [--no-images] [--json]
                                           存档文章
-  wechat-notebank import <Excel文件地址> [--json]
+  wechat-notebank import <Excel文件地址> [--no-images] [--json]
                                           批量导入文章
   wechat-notebank --help                  显示帮助
 
@@ -64,6 +67,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank pack reject ./Inbox/待审核加工包.md --json
   alskai-notebank pack revoke ./Inbox/待审核加工包.md --items L2-01 --json
   alskai-notebank import ./articles.xlsx
+  alskai-notebank search "饼干哥哥AGI" --limit 3 --json
+  alskai-notebank search "https://www.jintiankansha.me/column/xxx" --json
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
 
 首次使用会自动引导初始化设置。
@@ -345,18 +350,18 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 return;
             }
             console.error(`❌ ${message}`);
-            console.error('   用法: alskai-notebank <url> [--output <folder>] [--json]');
+            console.error('   用法: alskai-notebank <url> [--output <folder>] [--no-images] [--json]');
             process.exitCode = 1;
             return;
         }
-        const { url, outputPath, json } = fetchArgs;
+        const { url, outputPath, json, noImages = false } = fetchArgs;
         if (!url) {
             if (json) {
                 writeCommandJsonFailure('fetch', new command_error_1.CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
                 return;
             }
             console.error('❌ 请提供文章链接');
-            console.error('   用法: alskai-notebank <url> [--output <folder>] [--json]');
+            console.error('   用法: alskai-notebank <url> [--output <folder>] [--no-images] [--json]');
             process.exitCode = 1;
             return;
         }
@@ -367,7 +372,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
             console.log('');
         }
         try {
-            const result = await (0, fetch_1.fetchCommand)(url, outputPath, { json });
+            const result = await (0, fetch_1.fetchCommand)(url, outputPath, { json, noImages });
             if (json) {
                 (0, command_output_1.writeJsonOutput)({
                     ok: true,
@@ -404,12 +409,15 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 return;
             }
             console.error(`❌ ${commandError.message}`);
-            console.error('   用法: alskai-notebank import <Excel文件地址> [--json]');
+            console.error('   用法: alskai-notebank import <Excel文件地址> [--no-images] [--json]');
             process.exitCode = 1;
             return;
         }
         try {
-            const result = await (0, import_1.importCommand)(importArgs.filePath, { json: importArgs.json });
+            const result = await (0, import_1.importCommand)(importArgs.filePath, {
+                json: importArgs.json,
+                noImages: importArgs.noImages,
+            });
             if (importArgs.json) {
                 if (result.summary.failure > 0) {
                     const message = `批量导入完成，但有 ${result.summary.failure} 行失败`;
@@ -444,6 +452,75 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 return;
             }
             console.error(`\n❌ 导入失败: ${commandError.message}`);
+            process.exitCode = 1;
+        }
+        return;
+    }
+    // search 命令
+    if (command === 'search') {
+        const jsonRequested = (0, cli_1.isJsonOutputRequested)(args);
+        let searchArgs;
+        try {
+            searchArgs = (0, cli_1.parseSearchArgs)(args);
+        }
+        catch (error) {
+            const commandError = new command_error_1.CommandError('CLI_USAGE_ERROR', (0, command_error_1.getErrorMessage)(error));
+            if (jsonRequested) {
+                writeCommandJsonFailure('search', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
+            console.error('   用法: alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--limit N] [--account <name>] [--json]');
+            process.exitCode = 1;
+            return;
+        }
+        try {
+            const outcome = await (0, search_1.searchCommand)(searchArgs);
+            if (searchArgs.json) {
+                if (outcome.error) {
+                    // 部分失败：已解析条目随 result 保留（沿用 import 的 partial 信封先例）
+                    (0, command_output_1.writeJsonOutput)({
+                        ok: false,
+                        command: 'search',
+                        status: 'partial',
+                        result: outcome.result,
+                        error: {
+                            code: outcome.error.code,
+                            message: outcome.error.message,
+                        },
+                    });
+                    process.exitCode = 1;
+                }
+                else {
+                    (0, command_output_1.writeJsonOutput)({
+                        ok: true,
+                        command: 'search',
+                        status: 'completed',
+                        result: outcome.result,
+                    });
+                }
+            }
+            else {
+                for (const item of outcome.result.items) {
+                    const date = item.pubDate ? ` (${item.pubDate})` : '';
+                    console.log(`- ${item.title}${date}`);
+                    console.log(`  ${item.sourceUrl ?? '未能还原直链'}`);
+                }
+                if (outcome.error) {
+                    console.error(`❌ ${outcome.error.message}`);
+                    process.exitCode = 1;
+                }
+            }
+        }
+        catch (error) {
+            const commandError = error instanceof command_error_1.CommandError
+                ? error
+                : new command_error_1.CommandError('SEARCH_UNAVAILABLE', (0, command_error_1.getErrorMessage)(error));
+            if (searchArgs.json) {
+                writeCommandJsonFailure('search', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
             process.exitCode = 1;
         }
         return;

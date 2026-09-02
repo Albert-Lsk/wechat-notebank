@@ -3,6 +3,7 @@
 import { initCommand } from './commands/init';
 import { fetchCommand } from './commands/fetch';
 import { importCommand } from './commands/import';
+import { searchCommand } from './commands/search';
 import { setupCommand } from './commands/setup';
 import { doctorCommand } from './commands/doctor';
 import { createPackCommand } from './commands/pack';
@@ -23,6 +24,7 @@ import {
   parsePackUpdateArgs,
   parsePackRejectArgs,
   parsePackRevokeArgs,
+  parseSearchArgs,
   parseSetupArgs,
 } from './lib/cli';
 import { writeJsonOutput } from './lib/command-output';
@@ -55,16 +57,18 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                                           拒绝待审核加工包
   alskai-notebank pack revoke <pack> --items <ids> [--json]
                                           撤销已发布的候选内容
-  alskai-notebank <url> [--output <folder>] [--json]
+  alskai-notebank <url> [--output <folder>] [--no-images] [--json]
                                           存档文章
-  alskai-notebank import <Excel文件地址> [--json]
+  alskai-notebank import <Excel文件地址> [--no-images] [--json]
                                           批量导入文章
   alskai-notebank --version               显示版本号
+  alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--limit N] [--account <name>] [--json]
+                                          发现文章（搜狗最近文章 / 今天看啥完整历史）
 
 兼容命令:
-  wechat-notebank fetch <url> [--output <folder>] [--json]
+  wechat-notebank fetch <url> [--output <folder>] [--no-images] [--json]
                                           存档文章
-  wechat-notebank import <Excel文件地址> [--json]
+  wechat-notebank import <Excel文件地址> [--no-images] [--json]
                                           批量导入文章
   wechat-notebank --help                  显示帮助
 
@@ -78,6 +82,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank pack reject ./Inbox/待审核加工包.md --json
   alskai-notebank pack revoke ./Inbox/待审核加工包.md --items L2-01 --json
   alskai-notebank import ./articles.xlsx
+  alskai-notebank search "饼干哥哥AGI" --limit 3 --json
+  alskai-notebank search "https://www.jintiankansha.me/column/xxx" --json
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
 
 首次使用会自动引导初始化设置。
@@ -353,12 +359,12 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
       }
 
       console.error(`❌ ${message}`);
-      console.error('   用法: alskai-notebank <url> [--output <folder>] [--json]');
+      console.error('   用法: alskai-notebank <url> [--output <folder>] [--no-images] [--json]');
       process.exitCode = 1;
       return;
     }
 
-    const { url, outputPath, json } = fetchArgs;
+    const { url, outputPath, json, noImages = false } = fetchArgs;
     if (!url) {
       if (json) {
         writeCommandJsonFailure('fetch', new CommandError('CLI_USAGE_ERROR', '请提供文章链接'));
@@ -366,7 +372,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
       }
 
       console.error('❌ 请提供文章链接');
-      console.error('   用法: alskai-notebank <url> [--output <folder>] [--json]');
+      console.error('   用法: alskai-notebank <url> [--output <folder>] [--no-images] [--json]');
       process.exitCode = 1;
       return;
     }
@@ -379,7 +385,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
     }
 
     try {
-      const result = await fetchCommand(url, outputPath, { json });
+      const result = await fetchCommand(url, outputPath, { json, noImages });
       if (json) {
         writeJsonOutput({
           ok: true,
@@ -417,13 +423,16 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
         return;
       }
       console.error(`❌ ${commandError.message}`);
-      console.error('   用法: alskai-notebank import <Excel文件地址> [--json]');
+      console.error('   用法: alskai-notebank import <Excel文件地址> [--no-images] [--json]');
       process.exitCode = 1;
       return;
     }
 
     try {
-      const result = await importCommand(importArgs.filePath, { json: importArgs.json });
+      const result = await importCommand(importArgs.filePath, {
+        json: importArgs.json,
+        noImages: importArgs.noImages,
+      });
       if (importArgs.json) {
         if (result.summary.failure > 0) {
           const message = `批量导入完成，但有 ${result.summary.failure} 行失败`;
@@ -456,6 +465,73 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
         return;
       }
       console.error(`\n❌ 导入失败: ${commandError.message}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  // search 命令
+  if (command === 'search') {
+    const jsonRequested = isJsonOutputRequested(args);
+    let searchArgs;
+    try {
+      searchArgs = parseSearchArgs(args);
+    } catch (error) {
+      const commandError = new CommandError('CLI_USAGE_ERROR', getErrorMessage(error));
+      if (jsonRequested) {
+        writeCommandJsonFailure('search', commandError);
+        return;
+      }
+      console.error(`❌ ${commandError.message}`);
+      console.error('   用法: alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--limit N] [--account <name>] [--json]');
+      process.exitCode = 1;
+      return;
+    }
+
+    try {
+      const outcome = await searchCommand(searchArgs);
+      if (searchArgs.json) {
+        if (outcome.error) {
+          // 部分失败：已解析条目随 result 保留（沿用 import 的 partial 信封先例）
+          writeJsonOutput({
+            ok: false,
+            command: 'search',
+            status: 'partial',
+            result: outcome.result,
+            error: {
+              code: outcome.error.code,
+              message: outcome.error.message,
+            },
+          });
+          process.exitCode = 1;
+        } else {
+          writeJsonOutput({
+            ok: true,
+            command: 'search',
+            status: 'completed',
+            result: outcome.result,
+          });
+        }
+      } else {
+        for (const item of outcome.result.items) {
+          const date = item.pubDate ? ` (${item.pubDate})` : '';
+          console.log(`- ${item.title}${date}`);
+          console.log(`  ${item.sourceUrl ?? '未能还原直链'}`);
+        }
+        if (outcome.error) {
+          console.error(`❌ ${outcome.error.message}`);
+          process.exitCode = 1;
+        }
+      }
+    } catch (error) {
+      const commandError = error instanceof CommandError
+        ? error
+        : new CommandError('SEARCH_UNAVAILABLE', getErrorMessage(error));
+      if (searchArgs.json) {
+        writeCommandJsonFailure('search', commandError);
+        return;
+      }
+      console.error(`❌ ${commandError.message}`);
       process.exitCode = 1;
     }
     return;

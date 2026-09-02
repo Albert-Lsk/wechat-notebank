@@ -40,6 +40,8 @@ exports.FOLDER_L4 = exports.FOLDER_L3 = exports.FOLDER_L2 = exports.FOLDER_L1 = 
 exports.ensureDirectories = ensureDirectories;
 exports.generateFilename = generateFilename;
 exports.saveArticle = saveArticle;
+exports.reserveArticleFilePath = reserveArticleFilePath;
+exports.writeArticleFile = writeArticleFile;
 exports.articleExistsBySourceUrl = articleExistsBySourceUrl;
 exports.findArticleBySourceUrl = findArticleBySourceUrl;
 exports.withSourceUrlLock = withSourceUrlLock;
@@ -93,12 +95,20 @@ function truncateUtf8(value, maxBytes) {
     return result;
 }
 async function saveArticle(archivePath, title, content, meta) {
+    const filePath = await reserveArticleFilePath(archivePath, title, meta.pubDate);
+    await writeArticleFile(filePath, content, meta);
+    return filePath;
+}
+// 预留最终文件路径，目录存在时才能正确检测同名文件冲突。
+async function reserveArticleFilePath(archivePath, title, pubDate) {
     await fs.ensureDir(archivePath);
-    const filename = generateFilename(title, meta.pubDate);
-    const filePath = await getAvailableFilePath(archivePath, filename);
+    const filename = generateFilename(title, pubDate);
+    return getAvailableFilePath(archivePath, filename);
+}
+// 将文章正文和元数据写入指定文件。
+async function writeArticleFile(filePath, content, meta) {
     const fileContent = gray_matter_1.default.stringify(content, meta);
     await fs.writeFile(filePath, fileContent, 'utf-8');
-    return filePath;
 }
 async function articleExistsBySourceUrl(archivePath, sourceUrl) {
     return (await findArticleBySourceUrl(archivePath, sourceUrl)) !== null;
