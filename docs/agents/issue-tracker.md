@@ -12,6 +12,10 @@
 - 所有 blocker 关闭后，该 Ticket 才进入可实施 frontier。
 - 外部 Pull Request 不进入 triage 流程。
 
+## 多机协作回填约定
+
+若在某台机器的会话中使用 Linear（ALS-xx 等）或其他票据系统推进了工作，结论必须在 GitHub Issues 回填留档：至少一条发布/决策记录 Issue（链接规格、计划文档与 release/tag）。不要求双向同步，也不要求过程票一一镜像；GitHub 保持唯一真源。此约定用于避免多机并行时两条线互不知情（2026-09-01 v0.3.0 直接发布与 Wayfinder 地图撞车的教训，留档见 #33）。
+
 ## Wayfinding operations
 
 Wayfinder 使用 GitHub 原生父子 Issue 与依赖关系。地图和决策票都属于规划产物；除非地图 `Notes` 明确授权，否则不在地图内实施产品功能。
