@@ -490,11 +490,16 @@ exports.IMPORT_RSS_MAX_LIMIT = 100;
 function parseImportRssArgs(args) {
     let feedUrl;
     let limit;
+    let allowLocal = false;
     let json = false;
     for (let i = 0; i < args.length; i++) {
         const option = args[i];
         if (isJsonOutputOption(option)) {
             json = true;
+            continue;
+        }
+        if (option === '--allow-local') {
+            allowLocal = true;
             continue;
         }
         if (option === '--limit') {
@@ -523,6 +528,7 @@ function parseImportRssArgs(args) {
     }
     return {
         feedUrl,
+        allowLocal,
         limit: limit ?? exports.IMPORT_RSS_DEFAULT_LIMIT,
         json,
     };

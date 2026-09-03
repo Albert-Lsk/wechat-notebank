@@ -42,8 +42,11 @@ function isBlockedHostname(hostname) {
 }
 /**
  * 校验抓取地址；不合法时抛出带原因的错误。
+ *
+ * allowPrivate 仅用于显式枚举自建本地 feed 源（如本机 wewe-rss）的
+ * import-rss 场景：fetch/search 等面向任意 URL 的命令不得传它。
  */
-function assertSafeArticleUrl(rawUrl) {
+function assertSafeArticleUrl(rawUrl, options) {
     let parsed;
     try {
         parsed = new URL(rawUrl);
@@ -54,7 +57,7 @@ function assertSafeArticleUrl(rawUrl) {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new Error(`不支持的协议 "${parsed.protocol}"，只允许 http/https 链接`);
     }
-    if (isBlockedHostname(parsed.hostname)) {
+    if (!options?.allowPrivate && isBlockedHostname(parsed.hostname)) {
         throw new Error(`拒绝抓取内网 / 本地地址: ${parsed.hostname}`);
     }
     return parsed;

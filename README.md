@@ -213,7 +213,7 @@ $HOME\WeChatArticles
 | `alskai-notebank setup --agents <targets> [--dry-run] --json` | 安装或更新指定 Agent 集成 |
 | `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill、配置与加工包完整性 |
 | `alskai-notebank search <公众号名或专栏URL> [--source sogou|mirror] [--limit N] [--account <name>] [--json]` | 从搜狗或今天看啥镜像发现文章（只读） |
-| `alskai-notebank import-rss <feed-url> [--limit N] [--json]` | 读取 RSS/Atom/JSON Feed 订阅源，枚举文章列表（只读，不落盘） |
+| `alskai-notebank import-rss <feed-url> [--limit N] [--allow-local] [--json]` | 读取 RSS/Atom/JSON Feed 订阅源，枚举文章列表（只读，不落盘） |
 | `alskai-notebank pack create --source <file> --manifest <manifest.json> --json` | 创建或修订待审核加工包 |
 | `alskai-notebank pack create --source <file> --manifest <manifest.json> --dry-run` | 只校验 Manifest，不落盘（预演，磁盘零变化） |
 | `alskai-notebank pack update <pack> --manifest <manifest.json> --json` | 记录 L4 用户原话与 Agent 整理稿 |
@@ -265,7 +265,7 @@ alskai-notebank search \
 `import-rss` 读取任意 RSS 2.0 / Atom / JSON Feed 源，输出与 `search` 同构的文章列表。它对源保持中立：CLI 不内置任何第三方服务专有逻辑，feed URL 由你提供；自建的 wewe-rss 是常见 feed 源之一（见下方伴随服务小节）。
 
 ```bash
-alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 20 --json
+alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 20 --allow-local --json
 ```
 
 - `--limit` 缺省取最近 20 条，可设 1 到 100。
@@ -274,6 +274,8 @@ alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 20 --j
   并在 `result.note` 附一句说明（当前 fetch 仅支持微信文章页）。
 - feed 不可达、或服务端返回的内容不是 feed 时，分别返回结构化错误码
   `FEED_UNAVAILABLE` / `FEED_PARSE_FAILED`，与「源挂了」和「真没文章」可区分。
+- 本机源：feed URL 默认过 SSRF 安全闸，`localhost` / 内网地址会被拒绝；自建在本机的
+  wewe-rss 需显式加 `--allow-local` 放行（只对这一条命令生效，fetch/search 不受影响）
 - 边界：`import-rss` 默认只枚举、不落盘，不写知识库任何文件；归档由你挑选条目后
   逐篇调用 `fetch`（既有 `sourceUrl` 去重照常生效）。工具不提供批量自动归档开关。
 
@@ -290,7 +292,8 @@ alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 20 --j
   ```
 
 - 登录：浏览器打开 `http://localhost:4000`，用微信读书 App 扫码登录，再在其界面中订阅想要的公众号。
-- 获取 feed 地址：订阅完成后把以下三种格式之一的地址交给 `import-rss`：
+- 获取 feed 地址：订阅完成后把以下三种格式之一的地址交给 `import-rss`，并带上
+  `--allow-local`（wewe-rss 通常部署在本机或内网，默认会被 SSRF 安全闸拒绝）：
   - `/feeds/all.atom`（Atom）
   - `/feeds/all.rss`（RSS 2.0）
   - `/feeds/all.json`（JSON Feed）

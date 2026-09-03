@@ -26,6 +26,7 @@ export interface SearchArgs {
 export interface ImportRssArgs {
   feedUrl: string;
   limit: number;
+  allowLocal: boolean;
   json: boolean;
 }
 
@@ -639,6 +640,7 @@ export const IMPORT_RSS_MAX_LIMIT = 100;
 export function parseImportRssArgs(args: string[]): ImportRssArgs {
   let feedUrl: string | undefined;
   let limit: number | undefined;
+  let allowLocal = false;
   let json = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -646,6 +648,11 @@ export function parseImportRssArgs(args: string[]): ImportRssArgs {
 
     if (isJsonOutputOption(option)) {
       json = true;
+      continue;
+    }
+
+    if (option === '--allow-local') {
+      allowLocal = true;
       continue;
     }
 
@@ -681,6 +688,7 @@ export function parseImportRssArgs(args: string[]): ImportRssArgs {
 
   return {
     feedUrl,
+      allowLocal,
     limit: limit ?? IMPORT_RSS_DEFAULT_LIMIT,
     json,
   };

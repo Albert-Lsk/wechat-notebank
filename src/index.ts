@@ -66,7 +66,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank --version               显示版本号
   alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--limit N] [--account <name>] [--json]
                                           发现文章（搜狗最近文章 / 今天看啥完整历史）
-  alskai-notebank import-rss <feed-url> [--limit N] [--json]
+  alskai-notebank import-rss <feed-url> [--limit N] [--allow-local] [--json]
                                           读取 RSS/Atom/JSON Feed 订阅源，枚举文章列表（只读，不落盘）
 
 兼容命令:
@@ -88,7 +88,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank import ./articles.xlsx
   alskai-notebank search "饼干哥哥AGI" --limit 3 --json
   alskai-notebank search "https://www.jintiankansha.me/column/xxx" --json
-  alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 5 --json
+  alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 5 --allow-local --json
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
 
 首次使用会自动引导初始化设置。

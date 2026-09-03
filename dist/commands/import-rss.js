@@ -19,7 +19,7 @@ const UNRESOLVABLE_NOTE = '当前 fetch 仅支持微信文章页：resolvable:fa
 async function importRssCommand(args) {
     let feedUrl;
     try {
-        feedUrl = (0, url_1.assertSafeArticleUrl)(args.feedUrl);
+        feedUrl = (0, url_1.assertSafeArticleUrl)(args.feedUrl, { allowPrivate: args.allowLocal });
     }
     catch (error) {
         throw new command_error_1.CommandError('CLI_USAGE_ERROR', `feed 链接未通过安全校验: ${(0, command_error_1.getErrorMessage)(error)}`);

@@ -29,6 +29,22 @@ function parseJson(result) {
   return JSON.parse(result.stdout);
 }
 
+// 异步版：本地 server 用例专用——spawnSync 会阻塞事件循环，导致同进程 server 无法应答
+const { spawn } = require('child_process');
+function runImportRssAsync(args, homePath, extraEnv = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [cliPath, 'import-rss', ...args], {
+      cwd: homePath,
+      env: { ...process.env, HOME: homePath, NODE_OPTIONS: '', ...extraEnv },
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
 const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'wechat-notebank-import-rss-'));
 
 const UNRESOLVABLE_NOTE =
@@ -273,4 +289,36 @@ assert.match(human.stdout, /mp\.weixin\.qq\.com\/s\/rss-article-one/);
 assert.match(human.stdout, /不可归档/);
 assert.match(human.stdout, /仅支持微信文章页/);
 
-console.log('import-rss json tests passed');
+// ── 用例 9：--allow-local 放行本机自建 feed 源（真实本地 server，不经 mock）──
+const http = require('http');
+const localFeedBody = fs.readFileSync(fixture('feed-sample-atom.xml'));
+const localServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/atom+xml; charset=utf-8' });
+  res.end(localFeedBody);
+});
+
+(async () => {
+  await new Promise((resolve) => localServer.listen(0, '127.0.0.1', resolve));
+  const localPort = localServer.address().port;
+  const localUrl = `http://127.0.0.1:${localPort}/feeds/all.atom`;
+
+  // 不带 --allow-local：SSRF 闸默认拒绝（安全姿态不变）
+  const rejected = runImportRss([localUrl, '--json'], tempHome, { NODE_OPTIONS: '' });
+  assert.strictEqual(rejected.status, 1, rejected.stderr || rejected.stdout);
+  assert.strictEqual(parseJson(rejected).error.code, 'CLI_USAGE_ERROR');
+
+  // 带 --allow-local：本机源放行，正常解析（异步跑，父进程事件循环为 server 服务）
+  const allowed = await runImportRssAsync([localUrl, '--allow-local', '--json'], tempHome);
+  assert.strictEqual(allowed.status, 0, allowed.stderr || allowed.stdout);
+  const allowedOutput = parseJson(allowed);
+  assert.strictEqual(allowedOutput.ok, true);
+  assert.strictEqual(allowedOutput.result.feedKind, 'atom');
+  assert.ok(allowedOutput.result.items.length > 0);
+  assert.ok(allowedOutput.result.items.every((item) => 'resolvable' in item));
+
+  localServer.close();
+  console.log('import-rss json tests passed');
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

@@ -38,7 +38,7 @@ export interface ImportRssResult {
 export async function importRssCommand(args: ImportRssArgs): Promise<ImportRssResult> {
   let feedUrl: URL;
   try {
-    feedUrl = assertSafeArticleUrl(args.feedUrl);
+    feedUrl = assertSafeArticleUrl(args.feedUrl, { allowPrivate: args.allowLocal });
   } catch (error) {
     throw new CommandError(
       'CLI_USAGE_ERROR',

@@ -32,7 +32,8 @@ assert.match(readme, /alskai-notebank setup --agents (codex|claude|codex,claude)
 assert.match(readme, /alskai-notebank setup[^\n]*--dry-run[^\n]*--json/);
 assert.match(readme, /alskai-notebank doctor --json/);
 // import-rss：命令表行 + 用法小节 + 边界重申 + wewe-rss 伴随服务小节
-assert.match(readme, /alskai-notebank import-rss <feed-url> \[--limit N\] \[--json\]/);
+assert.match(readme, /alskai-notebank import-rss <feed-url> \[--limit N\] \[--allow-local\] \[--json\]/);
+assert.doesNotMatch(readme, /import-rss[^\n]*--force/);
 assert.match(readme, /伴随服务：wewe-rss/);
 assert.match(readme, /\/feeds\/all\.atom/);
 assert.match(readme, /\/feeds\/all\.rss/);
