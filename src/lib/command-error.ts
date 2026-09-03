@@ -13,7 +13,9 @@ export type CommandErrorCode =
   | 'DERIVED_FILE_MODIFIED'
   | 'TRANSACTION_FAILED'
   | 'SOGOU_CAPTCHA'
-  | 'SEARCH_UNAVAILABLE';
+  | 'SEARCH_UNAVAILABLE'
+  | 'FEED_UNAVAILABLE'
+  | 'FEED_PARSE_FAILED';
 
 export class CommandError extends Error {
   constructor(

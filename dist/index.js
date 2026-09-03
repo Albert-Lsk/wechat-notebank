@@ -5,6 +5,7 @@ const init_1 = require("./commands/init");
 const fetch_1 = require("./commands/fetch");
 const import_1 = require("./commands/import");
 const search_1 = require("./commands/search");
+const import_rss_1 = require("./commands/import-rss");
 const setup_1 = require("./commands/setup");
 const doctor_1 = require("./commands/doctor");
 const pack_1 = require("./commands/pack");
@@ -49,6 +50,8 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank --version               显示版本号
   alskai-notebank search "<公众号名或专栏URL>" [--source sogou|mirror] [--limit N] [--account <name>] [--json]
                                           发现文章（搜狗最近文章 / 今天看啥完整历史）
+  alskai-notebank import-rss <feed-url> [--limit N] [--json]
+                                          读取 RSS/Atom/JSON Feed 订阅源，枚举文章列表（只读，不落盘）
 
 兼容命令:
   wechat-notebank fetch <url> [--output <folder>] [--no-images] [--json]
@@ -69,6 +72,7 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
   alskai-notebank import ./articles.xlsx
   alskai-notebank search "饼干哥哥AGI" --limit 3 --json
   alskai-notebank search "https://www.jintiankansha.me/column/xxx" --json
+  alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 5 --json
   wechat-notebank fetch https://mp.weixin.qq.com/s/xxx
 
 首次使用会自动引导初始化设置。
@@ -518,6 +522,59 @@ wechat-notebank / alskai-notebank - 微信公众号文章存档工具 🏦
                 : new command_error_1.CommandError('SEARCH_UNAVAILABLE', (0, command_error_1.getErrorMessage)(error));
             if (searchArgs.json) {
                 writeCommandJsonFailure('search', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
+            process.exitCode = 1;
+        }
+        return;
+    }
+    // import-rss 命令
+    if (command === 'import-rss') {
+        const jsonRequested = (0, cli_1.isJsonOutputRequested)(args);
+        let importRssArgs;
+        try {
+            importRssArgs = (0, cli_1.parseImportRssArgs)(args);
+        }
+        catch (error) {
+            const commandError = new command_error_1.CommandError('CLI_USAGE_ERROR', (0, command_error_1.getErrorMessage)(error));
+            if (jsonRequested) {
+                writeCommandJsonFailure('import-rss', commandError);
+                return;
+            }
+            console.error(`❌ ${commandError.message}`);
+            console.error('   用法: alskai-notebank import-rss <feed-url> [--limit N] [--json]');
+            process.exitCode = 1;
+            return;
+        }
+        try {
+            const result = await (0, import_rss_1.importRssCommand)(importRssArgs);
+            if (importRssArgs.json) {
+                (0, command_output_1.writeJsonOutput)({
+                    ok: true,
+                    command: 'import-rss',
+                    status: 'completed',
+                    result,
+                });
+            }
+            else {
+                for (const item of result.items) {
+                    const date = item.pubDate ? ` (${item.pubDate})` : '';
+                    const tag = item.resolvable ? '' : '（不可归档）';
+                    console.log(`- ${item.title}${date}${tag}`);
+                    console.log(`  ${item.link}`);
+                }
+                if (result.note) {
+                    console.log(`ℹ️ ${result.note}`);
+                }
+            }
+        }
+        catch (error) {
+            const commandError = error instanceof command_error_1.CommandError
+                ? error
+                : new command_error_1.CommandError('FEED_UNAVAILABLE', (0, command_error_1.getErrorMessage)(error));
+            if (importRssArgs.json) {
+                writeCommandJsonFailure('import-rss', commandError);
                 return;
             }
             console.error(`❌ ${commandError.message}`);

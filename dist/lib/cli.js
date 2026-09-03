@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.IMPORT_RSS_MAX_LIMIT = exports.IMPORT_RSS_DEFAULT_LIMIT = void 0;
 exports.normalizeCliArgs = normalizeCliArgs;
 exports.parseFetchArgs = parseFetchArgs;
 exports.parseSetupArgs = parseSetupArgs;
@@ -13,6 +14,7 @@ exports.parseInitArgs = parseInitArgs;
 exports.isJsonOutputRequested = isJsonOutputRequested;
 exports.parseImportArgs = parseImportArgs;
 exports.parseSearchArgs = parseSearchArgs;
+exports.parseImportRssArgs = parseImportRssArgs;
 const JSON_OPTION = '--json';
 function normalizeCliArgs(args) {
     const [command, ...rest] = args;
@@ -479,6 +481,49 @@ function parseSearchArgs(args) {
         source: resolvedSource,
         limit: limit ?? maxLimit,
         ...(account ? { account } : {}),
+        json,
+    };
+}
+/** import-rss 缺省取最近 20 条，上限 100（spec 安全底线）。 */
+exports.IMPORT_RSS_DEFAULT_LIMIT = 20;
+exports.IMPORT_RSS_MAX_LIMIT = 100;
+function parseImportRssArgs(args) {
+    let feedUrl;
+    let limit;
+    let json = false;
+    for (let i = 0; i < args.length; i++) {
+        const option = args[i];
+        if (isJsonOutputOption(option)) {
+            json = true;
+            continue;
+        }
+        if (option === '--limit') {
+            const value = args[i + 1];
+            const parsed = Number(value);
+            if (!value || value.startsWith('-') || !Number.isInteger(parsed)) {
+                throw new Error('--limit requires a positive integer');
+            }
+            limit = parsed;
+            i++;
+            continue;
+        }
+        if (option.startsWith('-')) {
+            throw new Error(`Unknown import-rss option: ${option}`);
+        }
+        if (feedUrl) {
+            throw new Error(`Unexpected import-rss argument: ${option}`);
+        }
+        feedUrl = option;
+    }
+    if (!feedUrl) {
+        throw new Error('请提供 feed 链接（RSS/Atom/JSON Feed 源地址）');
+    }
+    if (limit !== undefined && (limit < 1 || limit > exports.IMPORT_RSS_MAX_LIMIT)) {
+        throw new Error(`--limit 必须在 1 到 ${exports.IMPORT_RSS_MAX_LIMIT} 之间`);
+    }
+    return {
+        feedUrl,
+        limit: limit ?? exports.IMPORT_RSS_DEFAULT_LIMIT,
         json,
     };
 }
