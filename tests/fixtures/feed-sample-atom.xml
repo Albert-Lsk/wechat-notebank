@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>示例公众号订阅（Atom）</title>
+  <id>urn:uuid:3f7d1a2e-0000-4000-8000-examplefeed</id>
+  <updated>2026-09-01T00:00:00Z</updated>
+  <entry>
+    <title>Atom 条目：检索驱动的写作流</title>
+    <id>https://mp.weixin.qq.com/s/atom-article-one</id>
+    <link rel="alternate" type="text/html" href="https://mp.weixin.qq.com/s/atom-article-one"/>
+    <published>2026-08-30T08:00:00Z</published>
+    <updated>2026-08-31T09:00:00Z</updated>
+  </entry>
+  <entry>
+    <title>外部站点条目（中文标题）</title>
+    <id>https://blog.example.com/atom-two</id>
+    <link href="https://blog.example.com/atom-two"/>
+  </entry>
+  <entry>
+    <title>相对链接条目</title>
+    <id>/entries/relative-3</id>
+    <link href="/entries/relative-3"/>
+  </entry>
+</feed>

@@ -1,0 +1,24 @@
+{
+  "version": "https://jsonfeed.org/version/1",
+  "title": "示例公众号订阅（JSON Feed）",
+  "home_page_url": "https://feeds.example.com/",
+  "items": [
+    {
+      "id": "https://mp.weixin.qq.com/s/json-article-one",
+      "url": "https://mp.weixin.qq.com/s/json-article-one",
+      "title": "JSON Feed 条目：卡片盒笔记法重读",
+      "date_published": "2026-08-29T12:00:00Z"
+    },
+    {
+      "id": "json-article-two",
+      "url": "https://blog.example.com/posts/json-two",
+      "title": "外部链接条目",
+      "date_published": "2026-08-28T00:00:00+08:00"
+    },
+    {
+      "id": "json-article-three",
+      "url": "https://mp.weixin.qq.com/s/json-article-three",
+      "title": "缺日期的 JSON 条目"
+    }
+  ]
+}

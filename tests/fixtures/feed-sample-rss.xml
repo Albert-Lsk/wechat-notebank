@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>示例公众号订阅（RSS）</title>
+    <link>https://feeds.example.com/all.rss</link>
+    <description>用于离线解析测试的 RSS 2.0 样本</description>
+    <item>
+      <title><![CDATA[第一篇：知识库的分层实践]]></title>
+      <link>https://mp.weixin.qq.com/s/rss-article-one</link>
+      <pubDate>Mon, 31 Aug 2026 08:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>独立博客同步：为什么我回到自己的网站写作</title>
+      <link>https://blog.example.com/posts/back-to-my-site</link>
+      <pubDate>Sun, 30 Aug 2026 10:30:00 +08:00</pubDate>
+    </item>
+    <item>
+      <title><![CDATA[缺日期的更新说明]]></title>
+      <link>https://mp.weixin.qq.com/s/rss-article-three</link>
+    </item>
+  </channel>
+</rss>
