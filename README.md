@@ -54,6 +54,7 @@ alskai-notebank "https://mp.weixin.qq.com/s/xxxxx" -o ~/WeChatArticles
 - 自动写入标题、作者、公众号、发布时间、原文链接等元数据
 - 归档时默认把正文图片下载到同名 `.assets` 目录，并输出真正的 Markdown + Frontmatter
 - 支持通过搜狗和今天看啥镜像发现公众号文章，再把返回的微信直链交给 `fetch`
+- 支持读取 RSS 2.0 / Atom / JSON Feed 订阅源，枚举文章列表（`import-rss`，只读不落盘）
 - 保存原文不依赖大模型；内容加工复用当前 Agent，不需要额外 API key
 - Windows / macOS / Linux 都可用，前提是本机能运行 Node.js 和 Chrome
 
@@ -212,6 +213,7 @@ $HOME\WeChatArticles
 | `alskai-notebank setup --agents <targets> [--dry-run] --json` | 安装或更新指定 Agent 集成 |
 | `alskai-notebank doctor --json` | 只读诊断环境、CLI、Skill、配置与加工包完整性 |
 | `alskai-notebank search <公众号名或专栏URL> [--source sogou|mirror] [--limit N] [--account <name>] [--json]` | 从搜狗或今天看啥镜像发现文章（只读） |
+| `alskai-notebank import-rss <feed-url> [--limit N] [--json]` | 读取 RSS/Atom/JSON Feed 订阅源，枚举文章列表（只读，不落盘） |
 | `alskai-notebank pack create --source <file> --manifest <manifest.json> --json` | 创建或修订待审核加工包 |
 | `alskai-notebank pack create --source <file> --manifest <manifest.json> --dry-run` | 只校验 Manifest，不落盘（预演，磁盘零变化） |
 | `alskai-notebank pack update <pack> --manifest <manifest.json> --json` | 记录 L4 用户原话与 Agent 整理稿 |
@@ -257,6 +259,47 @@ alskai-notebank search \
 当作归档地址。镜像站直链还原受登录墙限制，当前主要价值是发现历史文章标题；拿到标题后，
 可改用 sogou 按标题搜索微信直链再归档。工具不会登录或绕过镜像站访问控制。搜狗触发验证码后
 命令会立即停止且不自动重试；镜像专栏地址可在今天看啥站内搜索公众号后复制。
+
+### 订阅源导入：`import-rss`
+
+`import-rss` 读取任意 RSS 2.0 / Atom / JSON Feed 源，输出与 `search` 同构的文章列表。它对源保持中立：CLI 不内置任何第三方服务专有逻辑，feed URL 由你提供；自建的 wewe-rss 是常见 feed 源之一（见下方伴随服务小节）。
+
+```bash
+alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 20 --json
+```
+
+- `--limit` 缺省取最近 20 条，可设 1 到 100。
+- 返回条目为 `{title, link, pubDate, resolvable}`：链接是 `mp.weixin.qq.com` 文章页时
+  `resolvable:true`，可直接交给 `fetch` 归档；其他域名照常列出但标 `resolvable:false`，
+  并在 `result.note` 附一句说明（当前 fetch 仅支持微信文章页）。
+- feed 不可达、或服务端返回的内容不是 feed 时，分别返回结构化错误码
+  `FEED_UNAVAILABLE` / `FEED_PARSE_FAILED`，与「源挂了」和「真没文章」可区分。
+- 边界：`import-rss` 默认只枚举、不落盘，不写知识库任何文件；归档由你挑选条目后
+  逐篇调用 `fetch`（既有 `sourceUrl` 去重照常生效）。工具不提供批量自动归档开关。
+
+### 伴随服务：wewe-rss
+
+`import-rss` 只消费通用 feed，本身不提供「把公众号变成 feed」的能力。需要某个公众号可靠的全量/持续更新列表时，可以自建开源服务 wewe-rss（基于微信读书凭据）作为 feed 源。
+
+关系边界：CLI 只吃标准 RSS/Atom/JSON Feed，wewe-rss 只是 feed 源之一；它的部署、升级与账号管理都走其自身界面与文档，本工具不调用其专有管理接口，feed 源失效时也可更换任何其他 RSS 方案，CLI 侧无需改动。
+
+- 部署（Docker 示例；端口、卷与配置以 wewe-rss 官方仓库文档为准）：
+
+  ```bash
+  docker run -d --name wewe-rss -p 4000:4000 -v wewe-rss-data:/app/data cooderl/wewe-rss
+  ```
+
+- 登录：浏览器打开 `http://localhost:4000`，用微信读书 App 扫码登录，再在其界面中订阅想要的公众号。
+- 获取 feed 地址：订阅完成后把以下三种格式之一的地址交给 `import-rss`：
+  - `/feeds/all.atom`（Atom）
+  - `/feeds/all.rss`（RSS 2.0）
+  - `/feeds/all.json`（JSON Feed）
+
+  ```bash
+  alskai-notebank import-rss "http://localhost:4000/feeds/all.atom" --limit 50 --json
+  ```
+
+wewe-rss 的服务可用性、凭据有效期与访问限制由该服务自身承担；请遵守其文档与相关平台规则。
 
 ### 图片本地化与正文 Markdown
 

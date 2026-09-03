@@ -37,6 +37,7 @@ assert.match(entry, /Agent[^\n]*(interface|操作界面)/i);
 assert.match(entry, /CLI[^\n]*(deterministic|确定性)/i);
 assert.match(entry, /command -v alskai-notebank/);
 assert.match(entry, /\$HOME\/\.local\/bin\/alskai-notebank/);
+assert.match(entry, /RSS or subscription feed/);
 assert.doesNotMatch(entry, /alskai-notebank (setup|doctor|fetch|import)/);
 
 assert.ok(fs.existsSync(discoverReferencePath));
@@ -52,6 +53,16 @@ assert.match(discoverReference, /sourceUrl/);
 assert.match(discoverReference, /resolved:false/);
 assert.match(discoverReference, /crawler|subscription|scheduled monitor/i);
 assert.match(discoverReference, /do not scrape/i);
+// import-rss 路由：RSS/订阅源意图 → import-rss；无专栏地址的完整历史 → wewe-rss 路线
+assert.match(discoverReference, /alskai-notebank import-rss [^\n]*--json/);
+assert.match(discoverReference, /RSS or subscription feed/i);
+assert.match(discoverReference, /resolvable:true/);
+assert.match(discoverReference, /wewe-rss/);
+assert.match(discoverReference, /feeds\/all\.(atom|rss|json)/);
+assert.match(discoverReference, /FEED_UNAVAILABLE/);
+assert.match(discoverReference, /FEED_PARSE_FAILED/);
+assert.match(discoverReference, /exactly one[^\n]*import-rss/i);
+assert.match(discoverReference, /never[^\n]*bulk-archive/i);
 
 assert.ok(fs.existsSync(setupReferencePath));
 const setupReference = fs.readFileSync(setupReferencePath, 'utf8');

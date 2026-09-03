@@ -31,6 +31,18 @@ assert.doesNotMatch(readme, /archive\/refs\/heads\/main\.tar\.gz/);
 assert.match(readme, /alskai-notebank setup --agents (codex|claude|codex,claude)/);
 assert.match(readme, /alskai-notebank setup[^\n]*--dry-run[^\n]*--json/);
 assert.match(readme, /alskai-notebank doctor --json/);
+// import-rss：命令表行 + 用法小节 + 边界重申 + wewe-rss 伴随服务小节
+assert.match(readme, /alskai-notebank import-rss <feed-url> \[--limit N\] \[--json\]/);
+assert.match(readme, /伴随服务：wewe-rss/);
+assert.match(readme, /\/feeds\/all\.atom/);
+assert.match(readme, /\/feeds\/all\.rss/);
+assert.match(readme, /\/feeds\/all\.json/);
+assert.match(readme, /默认只枚举、不落盘/);
+assert.match(readme, /不提供批量自动归档/);
+assert.match(readme, /逐篇调用 `fetch`|逐篇调用 fetch/);
+assert.match(readme, /docker run[^\n]*wewe-rss/i);
+assert.match(readme, /微信读书[^\n]{0,12}扫码/);
+assert.match(readme, /feed 源之一/);
 assert.match(readme, /macOS Apple Silicon/);
 assert.match(readme, /重启 (Codex|Claude Code)/);
 assert.match(readme, /请阅读[^\n]*README[^\n]*(安装|更新)/);
