@@ -767,6 +767,24 @@ PowerShell 推荐：
 $HOME\WeChatArticles
 ```
 
+## 从源码构建 / 本地开发
+
+本节写给要修改代码或参与开发的贡献者。普通用户的安装路径不受影响：仍按「安装或更新」小节的标准路径，从固定 GitHub Release 下载 tgz、校验 `.sha256` 后本地安装，不需要从源码构建。
+
+克隆仓库后依次执行：
+
+```bash
+npm ci
+npm run build
+npm test
+```
+
+- `npm ci`：按 `package-lock.json` 精确安装依赖。
+- `npm run build`：用 TypeScript 把 `src/` 编译到 `dist/`。
+- `npm test`：先重新构建，再运行全部测试。
+
+`dist/` 是构建产物，不在仓库里（`.gitignore` 已忽略），所以克隆后必须先 `npm run build` 才能运行 `node dist/index.js`。发布打包（`npm run release:pack`）会自行重新构建，流程见 `RELEASING.md`。
+
 ## Claude Code / Codex Skill
 
 如果你使用 Claude Code 或 Codex，安装 CLI 后用同一个入口安装配套 Skill。首版 `setup` 和 `doctor` 只支持 macOS Apple Silicon。
