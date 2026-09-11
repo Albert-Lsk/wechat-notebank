@@ -271,6 +271,10 @@ function createCleanCodeBlock(
   return $cleanPre;
 }
 
+/** Inserted at generated br/block boundaries; consecutive runs collapse to one \n. */
+const CODE_BREAK_SENTINEL = '\u0001';
+const CODE_BLOCK_TAGS = new Set(['p', 'div', 'section', 'li', 'tr']);
+
 function extractCodeText($: cheerio.CheerioAPI, $pre: cheerio.Cheerio<any>): string {
   const $codeLines = $pre.children('code');
   const rawText = $codeLines.length > 1
@@ -278,9 +282,49 @@ function extractCodeText($: cheerio.CheerioAPI, $pre: cheerio.Cheerio<any>): str
         .toArray()
         .map((code) => $(code).text())
         .join('\n')
-    : $pre.text();
+    : extractCodeTextPreservingBreaks($, $pre);
 
   return normalizeCodeText(rawText);
+}
+
+function extractCodeTextPreservingBreaks(
+  $: cheerio.CheerioAPI,
+  $pre: cheerio.Cheerio<any>
+): string {
+  const $clone = $pre.clone();
+  dropInterBlockWhitespace($, $clone);
+  $clone.find('br').replaceWith(CODE_BREAK_SENTINEL);
+
+  for (const el of $clone.find([...CODE_BLOCK_TAGS].join(',')).toArray()) {
+    $(el).before(CODE_BREAK_SENTINEL);
+    $(el).after(CODE_BREAK_SENTINEL);
+  }
+
+  return $clone.text().replace(new RegExp(`${CODE_BREAK_SENTINEL}+`, 'g'), '\n');
+}
+
+function dropInterBlockWhitespace($: cheerio.CheerioAPI, $root: cheerio.Cheerio<any>): void {
+  const elements = [$root.get(0), ...$root.find('*').toArray()].filter(Boolean);
+
+  for (const el of elements) {
+    for (const child of $(el).contents().toArray()) {
+      if (!isWhitespaceTextNode(child)) {
+        continue;
+      }
+
+      if (isCodeBlockTag(child.prev) || isCodeBlockTag(child.next)) {
+        $(child).remove();
+      }
+    }
+  }
+}
+
+function isWhitespaceTextNode(node: { type?: string; data?: string }): boolean {
+  return node.type === 'text' && typeof node.data === 'string' && /^\s*$/.test(node.data);
+}
+
+function isCodeBlockTag(node: { type?: string; name?: string } | null | undefined): boolean {
+  return node?.type === 'tag' && typeof node.name === 'string' && CODE_BLOCK_TAGS.has(node.name);
 }
 
 function normalizeCodeText(text: string): string {
