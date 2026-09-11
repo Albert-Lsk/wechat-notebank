@@ -74,7 +74,7 @@ export async function saveArticle(
   return filePath;
 }
 
-// 预留最终文件路径，目录存在时才能正确检测同名文件冲突。
+// 原子预留最终文件路径（创建空占位文件），目录存在时才能正确检测同名文件冲突。
 export async function reserveArticleFilePath(
   archivePath: string,
   title: string,
@@ -368,17 +368,27 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+// 用 'wx' 独占创建做原子占位：EEXIST 说明名字已被占用（含其他进程刚预留的
+// 占位文件），换下一个名字重试；创建成功即锁死该文件名，同名 .assets 目录
+// 也随之一并独占，后续 writeArticleFile 覆盖自己的占位文件即可。
 async function getAvailableFilePath(archivePath: string, filename: string): Promise<string> {
   const parsed = path.parse(filename);
   let filePath = path.join(archivePath, filename);
   let counter = 2;
 
-  while (await fs.pathExists(filePath)) {
-    filePath = path.join(archivePath, `${parsed.name}-${counter}${parsed.ext}`);
-    counter++;
+  for (;;) {
+    try {
+      const fd = await fs.open(filePath, 'wx');
+      await fs.close(fd);
+      return filePath;
+    } catch (error) {
+      if (!hasErrorCode(error, 'EEXIST')) {
+        throw error;
+      }
+      filePath = path.join(archivePath, `${parsed.name}-${counter}${parsed.ext}`);
+      counter++;
+    }
   }
-
-  return filePath;
 }
 
 export function getL1Path(basePath: string): string {
