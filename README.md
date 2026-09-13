@@ -85,6 +85,8 @@ macOS / Linux：
 export WECHAT_NOTEBANK_CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 ```
 
+Windows 上用官方 Node.js 安装器装环境时，npm 全局命令目录会自动加入 PATH；Chrome 按默认位置安装即可被 `doctor` 自动探测，非默认位置用 `WECHAT_NOTEBANK_CHROME_PATH` 指定。
+
 ## 安装或更新
 
 首版 Agent 自助安装支持 macOS Apple Silicon。运行依赖 Node.js 20+、npm 和 Google Chrome；工具会诊断这些依赖，但不会替你安装它们。
@@ -98,6 +100,16 @@ shasum -a 256 -c wechat-notebank-0.3.1.tgz.sha256
 npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.3.1.tgz
 ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 ```
+
+### Windows PowerShell
+
+Windows 上从固定 Release 单行安装（npm 全局目录在当前用户配置下，无需管理员权限）：
+
+```powershell
+npm install -g "https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz"
+```
+
+安装后运行 `alskai-notebank --version` 验证。Windows 的核心命令（fetch、import、search、import-rss、pack）代码路径已适配并有单测覆盖，但尚未在真实 Windows 机器完成端到端验收，遇到问题请提 issue；`setup`（Agent 集成安装）仍仅支持 macOS Apple Silicon。
 
 `~/.local` 是当前用户可写目录，因此不需要 `sudo`，也不用修改 shell 配置。安装或更新 Agent 集成时，必须明确目标。可以先预演，再正式执行：
 
@@ -151,7 +163,7 @@ npm install -g wechat-notebank
 
 ### 当前版本边界
 
-- Agent 自助安装、`setup` 和 `doctor` 仍只支持 macOS Apple Silicon。
+- Agent 集成安装（`setup`）仍只支持 macOS Apple Silicon；`doctor` 在 Windows / macOS / Linux 都可运行，未安装 Agent 集成时以提示项呈现。
 - 运行前需要用户自行安装 Node.js 20+、npm 和 Google Chrome；工具不会安装系统依赖，不使用 `sudo`，也不修改 shell 配置。
 - 当前版本只通过固定 GitHub Release 资产安装，不发布 npm registry 包，也不提供自动更新服务。
 - 当前版本不提供独立 macOS 程序；具备 Apple Developer Program、Developer ID 签名和公证流程后，再另立规格开发独立程序。

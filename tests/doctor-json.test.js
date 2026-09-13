@@ -244,19 +244,33 @@ assert.strictEqual(
   'warning'
 );
 
-const unsupportedSandbox = createSandbox('doctor-unsupported');
-const unsupportedChrome = path.join(unsupportedSandbox.root, 'Google Chrome');
-fs.writeFileSync(unsupportedChrome, '');
-fs.chmodSync(unsupportedChrome, 0o755);
-const unsupportedDoctor = runCliWithRuntime(
+const crossPlatformSandbox = createSandbox('doctor-cross-platform');
+const crossPlatformChrome = path.join(crossPlatformSandbox.root, 'google-chrome');
+fs.writeFileSync(crossPlatformChrome, '');
+fs.chmodSync(crossPlatformChrome, 0o755);
+// 核心命令跨平台：doctor 在 linux 上不应再以 ENV_UNSUPPORTED 拒诊
+const crossPlatformDoctor = runCliWithRuntime(
   ['doctor', '--json'],
-  unsupportedSandbox.home,
-  unsupportedSandbox.project,
+  crossPlatformSandbox.home,
+  crossPlatformSandbox.project,
   { platform: 'linux', arch: 'x64' },
-  { WECHAT_NOTEBANK_CHROME_PATH: unsupportedChrome }
+  { WECHAT_NOTEBANK_CHROME_PATH: crossPlatformChrome }
 );
-assert.strictEqual(unsupportedDoctor.status, 1);
-assert.strictEqual(JSON.parse(unsupportedDoctor.stdout).error.code, 'ENV_UNSUPPORTED');
+assert.strictEqual(
+  crossPlatformDoctor.status,
+  0,
+  crossPlatformDoctor.stderr || crossPlatformDoctor.stdout
+);
+const crossPlatformOutput = JSON.parse(crossPlatformDoctor.stdout);
+assert.strictEqual(crossPlatformOutput.ok, true);
+const crossPlatformCheck = crossPlatformOutput.result.checks.find(
+  (check) => check.id === 'platform'
+);
+assert.strictEqual(crossPlatformCheck.status, 'passed');
+assert.match(
+  crossPlatformCheck.message,
+  /Agent 集成 setup 仅支持 macOS Apple Silicon/
+);
 
 const oldNodeSandbox = createSandbox('doctor-old-node');
 const oldNodeChrome = path.join(oldNodeSandbox.root, 'Google Chrome');

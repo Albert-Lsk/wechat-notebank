@@ -19,10 +19,17 @@ assert.match(
   new RegExp(`npm install -g --prefix "\\\$HOME/\\.local" \.\\/wechat-notebank-${escapedVersion}\\.tgz`)
 );
 assert.doesNotMatch(readme, /install[^\n]*--force/);
-assert.doesNotMatch(
-  readme,
-  new RegExp(`npm install -g (?!--prefix "\\$HOME/\\.local")[^\\n]*wechat-notebank-${escapedVersion}\\.tgz`)
-);
+// README 中 tgz 形态的 npm install -g 只允许两种：macOS prefix 序列、Windows 单行 Release URL；
+// 裸本地 tgz、浮动 latest 等一律禁止。registry 形态与 404 说明示例由双通道叙事约束。
+for (const line of readme.split('\n').filter((candidate) => candidate.includes('npm install -g'))) {
+  if (!line.includes('.tgz')) {
+    continue;
+  }
+  const allowed =
+    line.includes('--prefix "$HOME/.local"') ||
+    line.includes('https://github.com/Albert-Lsk/wechat-notebank/releases/download/');
+  assert.ok(allowed, `未授权的 tgz 安装形态: ${line.trim()}`);
+}
 assert.match(readme, /ALSKAI_NOTEBANK="\$HOME\/\.local\/bin\/alskai-notebank"/);
 assert.match(readme, /"\$ALSKAI_NOTEBANK" --help/);
 assert.match(readme, /"\$HOME\/\.local\/bin\/wechat-notebank" --help/);

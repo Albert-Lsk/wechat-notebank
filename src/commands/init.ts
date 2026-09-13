@@ -13,6 +13,7 @@ import {
 import { InitArgs, ScopedInitArgs } from '../lib/cli';
 import { ConfigScope, StoredWechatNotebankConfig } from '../types';
 import { CommandError, getErrorMessage } from '../lib/command-error';
+import { resolveHomeDir } from '../lib/environment';
 
 export interface InitCommandResult {
   scope: ConfigScope;
@@ -76,7 +77,7 @@ export async function initCommand(args?: InitArgs): Promise<InitCommandResult | 
   ]);
 
   const basePath = path.resolve(
-    answers.basePath.trim().replace(/^~/, process.env.HOME || '')
+    answers.basePath.trim().replace(/^~/, resolveHomeDir())
   );
   const name = answers.name.trim() || 'MyNotes';
 
@@ -89,7 +90,7 @@ export async function initCommand(args?: InitArgs): Promise<InitCommandResult | 
 
 async function initializeScopedConfig(args: ScopedInitArgs): Promise<InitCommandResult> {
   const { scope, archivePath } = args;
-  const resolvedArchivePath = path.resolve(archivePath.replace(/^~/, process.env.HOME || ''));
+  const resolvedArchivePath = path.resolve(archivePath.replace(/^~/, resolveHomeDir()));
   let existingConfig: StoredWechatNotebankConfig | null;
   let globalConfig: StoredWechatNotebankConfig | null = null;
   try {

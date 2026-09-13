@@ -1,5 +1,4 @@
 import * as fs from 'fs-extra';
-import * as os from 'os';
 import * as path from 'path';
 import {
   ConfigScope,
@@ -7,6 +6,7 @@ import {
   WechatNotebankConfig,
 } from '../types';
 import { getErrorMessage } from './command-error';
+import { resolveHomeDir } from './environment';
 import { getL1Path } from './storage';
 
 const CONFIG_FILE = '.wechat-notebank.json';
@@ -14,7 +14,7 @@ const GLOBAL_CONFIG_DIR = 'alskai-notebank';
 
 export function getConfigPath(scope: ConfigScope = 'project'): string {
   if (scope === 'global') {
-    const homePath = process.env.HOME || os.homedir();
+    const homePath = resolveHomeDir();
     return path.join(homePath, '.config', GLOBAL_CONFIG_DIR, 'config.json');
   }
 

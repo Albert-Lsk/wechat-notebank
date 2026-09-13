@@ -1,11 +1,10 @@
 import * as fs from 'fs-extra';
-import * as os from 'os';
 import * as path from 'path';
 import { constants } from 'fs';
 import { spawnSync } from 'child_process';
 import { readConfig } from '../lib/config';
 import { CommandErrorCode, getErrorMessage } from '../lib/command-error';
-import { inspectPlatform } from '../lib/environment';
+import { chromeCandidatesFor, inspectPlatform, resolveHomeDir } from '../lib/environment';
 import { getPackageRoot, getPackageVersion } from '../lib/package-info';
 import {
   getAgentSkillTarget,
@@ -49,7 +48,7 @@ export async function doctorCommand(): Promise<DoctorResult> {
   const installRoot = process.env.WECHAT_NOTEBANK_INSTALL_ROOT || getPackageRoot();
   checks.push(await checkInstallIntegrity(installRoot, version));
 
-  const homePath = process.env.HOME || os.homedir();
+  const homePath = resolveHomeDir();
   checks.push(await checkSkill(homePath, 'codex', version));
   checks.push(await checkSkill(homePath, 'claude', version));
   checks.push(await checkClaudeCommand(homePath));
@@ -162,18 +161,21 @@ async function checkInstallIntegrity(
 
 function checkPlatform(): DoctorCheck {
   const platform = inspectPlatform();
-  return platform.supported
-    ? {
-      id: 'platform',
-      status: 'passed',
-      message: `${platform.platform}/${platform.arch}`,
-    }
-    : {
+  if (!platform.runtimeSupported) {
+    return {
       id: 'platform',
       status: 'failed',
-      message: `仅支持 macOS Apple Silicon，当前环境为 ${platform.platform}/${platform.arch}`,
+      message: `暂不支持的平台 ${platform.platform}/${platform.arch}（核心命令支持 Windows / macOS / Linux）`,
       errorCode: 'ENV_UNSUPPORTED',
     };
+  }
+  return {
+    id: 'platform',
+    status: 'passed',
+    message: platform.setupSupported
+      ? `${platform.platform}/${platform.arch}`
+      : `${platform.platform}/${platform.arch}（核心命令可用；Agent 集成 setup 仅支持 macOS Apple Silicon）`,
+  };
 }
 
 function checkNode(): DoctorCheck {
@@ -210,7 +212,7 @@ async function checkChrome(): Promise<DoctorCheck> {
   const configured = process.env.WECHAT_NOTEBANK_CHROME_PATH;
   const candidates = configured
     ? [configured]
-    : ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
+    : chromeCandidatesFor();
   for (const candidate of candidates) {
     try {
       const stat = await fs.stat(candidate);
@@ -329,10 +331,10 @@ async function checkConfigAndArchive(): Promise<DoctorCheck[]> {
 
 function expandHome(value: string): string {
   if (value === '~') {
-    return process.env.HOME || os.homedir();
+    return resolveHomeDir();
   }
   if (/^~[\\/]/.test(value)) {
-    return path.join(process.env.HOME || os.homedir(), value.slice(2));
+    return path.join(resolveHomeDir(), value.slice(2));
   }
   return value;
 }

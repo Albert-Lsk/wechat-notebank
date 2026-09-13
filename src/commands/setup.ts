@@ -1,9 +1,8 @@
 import * as fs from 'fs-extra';
-import * as os from 'os';
 import * as path from 'path';
 import { SetupArgs, SetupAgent } from '../lib/cli';
 import { CommandError, getErrorMessage } from '../lib/command-error';
-import { assertSupportedPlatform } from '../lib/environment';
+import { assertSupportedPlatform, resolveHomeDir } from '../lib/environment';
 import { getPackageRoot, getPackageVersion } from '../lib/package-info';
 import { doctorCommand, DoctorResult } from './doctor';
 import {
@@ -49,7 +48,7 @@ export async function setupCommand(args: SetupArgs): Promise<SetupResult> {
   if (blockingCheck?.errorCode) {
     throw new CommandError(blockingCheck.errorCode, blockingCheck.message);
   }
-  const homePath = process.env.HOME || os.homedir();
+  const homePath = resolveHomeDir();
   const packageRoot = getPackageRoot();
   const version = await getPackageVersion();
   const actions = await getSetupActions(
