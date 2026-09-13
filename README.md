@@ -1,4 +1,4 @@
-# wechat-notebank
+# 🏦 wechat-notebank
 
 > 把值得保留的微信公众号文章转成由自己掌控的本地 Markdown，沉淀到 Obsidian、Logseq 或个人知识库，随时搜索、引用和复盘。
 
@@ -7,7 +7,7 @@ Archive WeChat Official Account articles as local Markdown for Obsidian, Logseq,
 [![Install from GitHub](https://img.shields.io/badge/install-GitHub-black?style=flat-square)](#安装或更新)
 [![MIT License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-## 这是什么
+## 💡 这是什么
 
 `wechat-notebank` 是一个本地命令行工具，用 Chrome 打开微信公众号文章，提取文章内容，然后保存为带 Frontmatter 的 Markdown 文件。
 
@@ -25,7 +25,7 @@ Archive WeChat Official Account articles as local Markdown for Obsidian, Logseq,
 alskai-notebank "https://mp.weixin.qq.com/s/xxxxx" -o ~/WeChatArticles
 ```
 
-## 适用场景
+## 🎯 适用场景
 
 - 保存公众号文章，在链接失效或难以找回之前留下一份本地副本
 - 把微信文章转成 Markdown，迁移到 Obsidian、Logseq 或普通文件夹
@@ -35,7 +35,7 @@ alskai-notebank "https://mp.weixin.qq.com/s/xxxxx" -o ~/WeChatArticles
 
 工具需要目标文章仍可在本机 Chrome 中正常打开，不负责恢复已经失效或无权访问的内容。
 
-## 效果预览
+## 👀 效果预览
 
 文件夹结构：
 
@@ -45,20 +45,20 @@ alskai-notebank "https://mp.weixin.qq.com/s/xxxxx" -o ~/WeChatArticles
 
 <img width="2410" height="1684" alt="image" src="https://github.com/user-attachments/assets/86d9eb95-5ab2-43b8-a028-a09b04a4dedd" />
 
-## 特性
+## ✨ 特性
 
-- 一行命令保存微信公众号文章
-- 支持指定输出目录
-- 支持 Excel 批量导入
-- 自动按文章真实发布日期命名
-- 自动写入标题、作者、公众号、发布时间、原文链接等元数据
-- 归档时默认把正文图片下载到同名 `.assets` 目录，并输出真正的 Markdown + Frontmatter
-- 支持通过搜狗和今天看啥镜像发现公众号文章，再把返回的微信直链交给 `fetch`
-- 支持读取 RSS 2.0 / Atom / JSON Feed 订阅源，枚举文章列表（`import-rss`，只读不落盘）
-- 保存原文不依赖大模型；内容加工复用当前 Agent，不需要额外 API key
-- Windows / macOS / Linux 都可用，前提是本机能运行 Node.js 和 Chrome
+- ⚡ 一行命令保存微信公众号文章
+- 📁 支持指定输出目录
+- 📊 支持 Excel 批量导入
+- 📅 自动按文章真实发布日期命名
+- 🏷️ 自动写入标题、作者、公众号、发布时间、原文链接等元数据
+- 🖼️ 归档时默认把正文图片下载到同名 `.assets` 目录，并输出真正的 Markdown + Frontmatter
+- 🔍 支持通过搜狗和今天看啥镜像发现公众号文章，再把返回的微信直链交给 `fetch`
+- 📡 支持读取 RSS 2.0 / Atom / JSON Feed 订阅源，枚举文章列表（`import-rss`，只读不落盘）
+- 🔒 保存原文不依赖大模型；内容加工复用当前 Agent，不需要额外 API key
+- 💻 Windows / macOS / Linux 都可用，前提是本机能运行 Node.js 和 Chrome
 
-## 环境要求
+## 🧰 环境要求
 
 - Node.js 20 或更高版本
 - npm
@@ -87,7 +87,7 @@ export WECHAT_NOTEBANK_CHROME_PATH="/Applications/Google Chrome.app/Contents/Mac
 
 Windows 上用官方 Node.js 安装器装环境时，npm 全局命令目录会自动加入 PATH；Chrome 按默认位置安装即可被 `doctor` 自动探测，非默认位置用 `WECHAT_NOTEBANK_CHROME_PATH` 指定。
 
-## 安装或更新
+## 📦 安装或更新
 
 运行依赖 Node.js 20+、npm 和 Google Chrome；工具会诊断这些依赖，但不会替你安装它们。Agent 自助安装当前支持 macOS Apple Silicon。安装有两条等价通道，安装的是同一份构建产物（决策留档见 `docs/adr/0001`）：
 
@@ -176,7 +176,7 @@ npm install -g wechat-notebank@0.4.0
 - 当前版本通过固定 GitHub Release 资产与 npm registry 双通道安装（决策留档 `docs/adr/0001`），不提供自动更新服务。
 - 当前版本不提供独立 macOS 程序；具备 Apple Developer Program、Developer ID 签名和公证流程后，再另立规格开发独立程序。
 
-## 快速开始
+## 🚀 快速开始
 
 ### macOS / Linux
 
@@ -223,7 +223,7 @@ alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%
 $HOME\WeChatArticles
 ```
 
-## 常用命令
+## ⌨️ 常用命令
 
 | 命令 | 说明 |
 |------|------|
@@ -430,7 +430,7 @@ alskai-notebank pack revoke \
 
 `doctor --json` 会只读报告生成文件缺失、哈希漂移、双链断裂、隐藏状态缺失，以及当前状态与 revision 快照不一致；它不会自动删除、改写或修复知识库。
 
-## Manifest v1 规范
+## 📋 Manifest v1 规范
 
 `pack create` 和 `pack update` 读取的 Manifest 是一份 JSON 文件。校验器对字段、类型和取值做确定性检查，任何一项不满足都会拒收整份 Manifest。
 
@@ -532,7 +532,7 @@ alskai-notebank pack revoke \
 
 `paraphrase`、`case`、`data` 三种类型不做精确命中校验，但内容仍应能对应到 `sourceSection` 指向的原文位置。
 
-## 输出文件
+## 📄 输出文件
 
 保存后的文件名格式：
 
@@ -558,7 +558,7 @@ tags: []
 正文内容...
 ```
 
-## 批量导入
+## 📊 批量导入
 
 把文章链接整理成 Excel 文件，读取第一个工作表。推荐两列：
 
@@ -594,7 +594,7 @@ alskai-notebank import ./articles.xlsx
 - 某一行失败不会中断后续行，结束后会输出失败明细
 - Numbers 表格请先导出为 Excel `.xlsx`
 
-## 知识库结构
+## 🗂️ 知识库结构
 
 默认推荐用 Progressive Summarization 的四层结构：
 
@@ -642,7 +642,7 @@ alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" \
 
 知识库根目录是 `L1_原文` 的上一级目录，`pack` 系列命令会根据原文路径自动定位它，`Inbox`、L2-L4 和隐藏状态区都生成在这里。只执行 `fetch` 不会创建 `Inbox`、L2-L4 或 `.alskai-notebank/`；`fetch` 期间出现的 `.alskai-notebank-locks` 是临时归档锁目录，命令结束后会自动清理。用 `init` 引导初始化时，四层骨架目录会一次性预建。
 
-## 配置文件
+## ⚙️ 配置文件
 
 全局默认配置位于 `~/.config/alskai-notebank/config.json`，项目覆盖配置 `.wechat-notebank.json` 位于当前工作目录。项目配置只覆盖其中明确写入的字段，其余值继承全局配置。
 
@@ -697,7 +697,7 @@ WECHAT_NOTEBANK_SEARCH_INTERVAL_MS=100 \
 抓取文章仍支持 `WECHAT_NOTEBANK_CHROME_PATH`、`WECHAT_NOTEBANK_NAVIGATION_TIMEOUT_MS`
 和 `WECHAT_NOTEBANK_CONTENT_TIMEOUT_MS`；图片与搜索变量只影响 v0.3.0 新增流水线。
 
-## 常见问题
+## ❓ 常见问题
 
 ### 两个命令有什么区别？
 
@@ -787,7 +787,7 @@ PowerShell 推荐：
 $HOME\WeChatArticles
 ```
 
-## 从源码构建 / 本地开发
+## 🛠️ 从源码构建 / 本地开发
 
 本节写给要修改代码或参与开发的贡献者。普通用户的安装路径不受影响：仍按「安装或更新」小节的标准路径，从固定 GitHub Release 下载 tgz、校验 `.sha256` 后本地安装，不需要从源码构建。
 
@@ -805,7 +805,7 @@ npm test
 
 `dist/` 是构建产物，不在仓库里（`.gitignore` 已忽略），所以克隆后必须先 `npm run build` 才能运行 `node dist/index.js`。发布打包（`npm run release:pack`）会自行重新构建，流程见 `RELEASING.md`。
 
-## Claude Code / Codex Skill
+## 🤖 Claude Code / Codex Skill
 
 如果你使用 Claude Code 或 Codex，安装 CLI 后用同一个入口安装配套 Skill。首版 `setup` 和 `doctor` 只支持 macOS Apple Silicon。
 
@@ -827,7 +827,7 @@ Claude Code 示例：
 
 Skill 只负责调用本地 CLI，不会重新实现抓取逻辑，也不会把你的知识库上传到外部服务。
 
-## 技术栈
+## 🧱 技术栈
 
 <p align="left">
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg" width="40" height="40" alt="TypeScript"/>
@@ -840,7 +840,7 @@ Skill 只负责调用本地 CLI，不会重新实现抓取逻辑，也不会把�
 - Cheerio
 - Gray-matter
 
-## 免责声明
+## ⚠️ 免责声明
 
 本项目仅供个人学习、研究和资料归档使用。使用者应确保自己对所访问、下载、保存和处理的内容拥有合法访问权限，并遵守相关法律法规、平台规则与原作者版权声明。
 
@@ -860,6 +860,6 @@ Skill 只负责调用本地 CLI，不会重新实现抓取逻辑，也不会把�
 
 一旦下载、安装、运行或使用本项目，即视为已阅读、理解并同意上述声明与附加条款。若不同意，请立即停止使用并删除本项目及其相关副本。
 
-## License
+## 📜 License
 
 MIT © [Albert-Lsk](https://github.com/Albert-Lsk)
