@@ -89,9 +89,17 @@ Windows 上用官方 Node.js 安装器装环境时，npm 全局命令目录会�
 
 ## 安装或更新
 
-首版 Agent 自助安装支持 macOS Apple Silicon。运行依赖 Node.js 20+、npm 和 Google Chrome；工具会诊断这些依赖，但不会替你安装它们。
+运行依赖 Node.js 20+、npm 和 Google Chrome；工具会诊断这些依赖，但不会替你安装它们。Agent 自助安装当前支持 macOS Apple Silicon。安装有两条等价通道，安装的是同一份构建产物（决策留档见 `docs/adr/0001`）：
 
-安装固定的 GitHub Release 标签，避免使用持续变化的开发分支。标准安装路径是：下载 Release 资产，校验 SHA-256，再从本地 tgz 安装：
+**推荐：npm registry 一行安装**——避免使用持续变化的开发分支，固定版本号安装：
+
+```bash
+npm install -g wechat-notebank@0.3.1
+```
+
+免安装试用可运行 `npx wechat-notebank@0.3.1 --help`；Windows PowerShell 同样适用（见下文小节）。
+
+**校验路径：GitHub Release 固定资产**——Agent 自助安装、需要人工核对供应链时使用。标准路径是：下载 Release 资产，校验 SHA-256，再从本地 tgz 安装：
 
 ```bash
 curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz
@@ -155,17 +163,17 @@ rm -f "$HOME/.local/bin/alskai-notebank" "$HOME/.local/bin/wechat-notebank"
 "$HOME/.local/bin/wechat-notebank" --help
 ```
 
-`wechat-notebank` 暂未发布到 npm registry。如果你运行下面命令遇到 `404 Not Found`，说明 npm 包还没发布：
+npm registry 通道的包名就是 `wechat-notebank`，始终带固定版本号安装，升级时换版本号重跑即可：
 
 ```bash
-npm install -g wechat-notebank
+npm install -g wechat-notebank@0.3.1
 ```
 
 ### 当前版本边界
 
 - Agent 集成安装（`setup`）仍只支持 macOS Apple Silicon；`doctor` 在 Windows / macOS / Linux 都可运行，未安装 Agent 集成时以提示项呈现。
 - 运行前需要用户自行安装 Node.js 20+、npm 和 Google Chrome；工具不会安装系统依赖，不使用 `sudo`，也不修改 shell 配置。
-- 当前版本只通过固定 GitHub Release 资产安装，不发布 npm registry 包，也不提供自动更新服务。
+- 当前版本通过固定 GitHub Release 资产与 npm registry 双通道安装（决策留档 `docs/adr/0001`），不提供自动更新服务。
 - 当前版本不提供独立 macOS 程序；具备 Apple Developer Program、Developer ID 签名和公证流程后，再另立规格开发独立程序。
 
 ## 快速开始
@@ -712,7 +720,7 @@ wechat-notebank fetch <url>
 
 这通常表示旧版本在等待微信页面所有网络请求结束。微信文章里的图片、统计脚本或风控页面可能让页面一直不进入“网络空闲”状态。
 
-先按「安装或更新」小节的标准路径更新到固定版本（下载 tgz 和 sha256、校验后从本地 tgz 安装），然后重试：
+先更新到固定版本（npm 一行安装，或按「安装或更新」的 Release 校验路径），然后重试：
 
 ```bash
 alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output ~/WeChatArticles
@@ -761,9 +769,9 @@ alskai-notebank fetch "https://mp.weixin.qq.com/s/xxxxx" --output "%USERPROFILE%
 
 可以先把链接复制到 Chrome 手动打开确认。如果 Chrome 里能正常看到正文，但工具仍失败，请带上链接、系统版本、Chrome 版本和完整错误信息提交 issue。
 
-### `npm install -g wechat-notebank` 返回 404
+### npm 通道和 GitHub Release 通道有什么区别？
 
-当前包还没有发布到 npm registry。请按「安装或更新」小节的标准路径从固定 GitHub Release 安装：先下载 tgz 和 `.sha256` 文件并校验，再从本地 tgz 安装。
+没有本质区别，两个通道安装的是同一份构建产物（决策留档见 `docs/adr/0001`）。日常使用 `npm install -g wechat-notebank@<版本号>`；需要人工核对供应链或让 Agent 自助安装时，走「安装或更新」的 Release 校验路径。若 npm 安装报 `404 Not Found`，先用 `npm view wechat-notebank versions` 确认目标版本已发布；发布滞后时改用 Release 路径。
 
 ### Windows 里 `~/WeChatArticles` 能用吗？
 

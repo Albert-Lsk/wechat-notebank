@@ -38,6 +38,11 @@ assert.doesNotMatch(readme, /archive\/refs\/heads\/main\.tar\.gz/);
 assert.match(readme, /alskai-notebank setup --agents (codex|claude|codex,claude)/);
 assert.match(readme, /alskai-notebank setup[^\n]*--dry-run[^\n]*--json/);
 assert.match(readme, /alskai-notebank doctor --json/);
+// npm 双通道：registry 一行安装为推荐路径，决策留档被引用，旧的「未发布」叙事已清除
+assert.match(readme, /npm install -g wechat-notebank@\d+\.\d+\.\d+/);
+assert.match(readme, /docs\/adr\/0001/);
+assert.doesNotMatch(readme, /暂未发布到 npm registry/);
+assert.doesNotMatch(readme, /不发布 npm registry/);
 // import-rss：命令表行 + 用法小节 + 边界重申 + wewe-rss 伴随服务小节
 assert.match(readme, /alskai-notebank import-rss <feed-url> \[--limit N\] \[--allow-local\] \[--json\]/);
 assert.doesNotMatch(readme, /import-rss[^\n]*--force/);

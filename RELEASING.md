@@ -1,6 +1,6 @@
 # 发布 wechat-notebank
 
-本项目通过 GitHub Release 附件与 npm registry 双通道发布（#41 决策）。两个通道使用同一份经过边界校验的 npm `.tgz`；不要使用 GitHub 自动生成的 `Source code (zip)` 或 `Source code (tar.gz)` 作为安装源。
+本项目通过 GitHub Release 附件与 npm registry 双通道发布（#41 决策，留档 `docs/adr/0001-npm-dual-channel-release.md`）。两个通道使用同一份经过边界校验的 npm `.tgz`；不要使用 GitHub 自动生成的 `Source code (zip)` 或 `Source code (tar.gz)` 作为安装源。
 
 ## v0.3.1 发布前提
 
