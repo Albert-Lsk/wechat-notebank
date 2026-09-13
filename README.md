@@ -94,18 +94,18 @@ Windows 上用官方 Node.js 安装器装环境时，npm 全局命令目录会�
 **推荐：npm registry 一行安装**——避免使用持续变化的开发分支，固定版本号安装：
 
 ```bash
-npm install -g wechat-notebank@0.3.1
+npm install -g wechat-notebank@0.4.0
 ```
 
-免安装试用可运行 `npx wechat-notebank@0.3.1 --help`；Windows PowerShell 同样适用（见下文小节）。
+免安装试用可运行 `npx wechat-notebank@0.4.0 --help`；Windows PowerShell 同样适用（见下文小节）。
 
 **校验路径：GitHub Release 固定资产**——Agent 自助安装、需要人工核对供应链时使用。标准路径是：下载 Release 资产，校验 SHA-256，再从本地 tgz 安装：
 
 ```bash
-curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz
-curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz.sha256
-shasum -a 256 -c wechat-notebank-0.3.1.tgz.sha256
-npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.3.1.tgz
+curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.4.0/wechat-notebank-0.4.0.tgz
+curl -LO https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.4.0/wechat-notebank-0.4.0.tgz.sha256
+shasum -a 256 -c wechat-notebank-0.4.0.tgz.sha256
+npm install -g --prefix "$HOME/.local" ./wechat-notebank-0.4.0.tgz
 ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 ```
 
@@ -114,7 +114,7 @@ ALSKAI_NOTEBANK="$HOME/.local/bin/alskai-notebank"
 Windows 上从固定 Release 单行安装（npm 全局目录在当前用户配置下，无需管理员权限）：
 
 ```powershell
-npm install -g "https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz"
+npm install -g "https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.4.0/wechat-notebank-0.4.0.tgz"
 ```
 
 安装后运行 `alskai-notebank --version` 验证。Windows 的核心命令（fetch、import、search、import-rss、pack）代码路径已适配并有单测覆盖，但尚未在真实 Windows 机器完成端到端验收，遇到问题请提 issue；`setup`（Agent 集成安装）仍仅支持 macOS Apple Silicon。
@@ -143,7 +143,7 @@ rm -f "$HOME/.local/bin/alskai-notebank" "$HOME/.local/bin/wechat-notebank"
 你也可以把下面这段原样发给具备终端权限的 Agent：
 
 ```text
-请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.3.1 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。安装完成后需要重启 Agent 会话，Skill 才会被发现（setup 成功时会返回 restartRequired: true）。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
+请阅读 https://github.com/Albert-Lsk/wechat-notebank 的 README，帮我安装或更新固定的 v0.4.0 版本。先确认当前设备是 macOS Apple Silicon，并检查 Node.js 20+、npm 和 Google Chrome；不要使用 sudo，不要从 main 安装，也不要修改 shell 配置。把固定 Release 资产安装到当前用户的 ~/.local，并始终用 ~/.local/bin/alskai-notebank 调用工具。询问我要安装 Codex、Claude Code 还是两者，然后先运行 setup --dry-run --json 展示影响，经我确认后执行 setup --json，再运行 doctor --json 验证。最后提醒我重启对应 Agent。安装完成后需要重启 Agent 会话，Skill 才会被发现（setup 成功时会返回 restartRequired: true）。若固定 Release 尚未发布，停止安装并明确告诉我，不要改用其他来源。
 ```
 
 ### 安装排障
@@ -166,7 +166,7 @@ rm -f "$HOME/.local/bin/alskai-notebank" "$HOME/.local/bin/wechat-notebank"
 npm registry 通道的包名就是 `wechat-notebank`，始终带固定版本号安装，升级时换版本号重跑即可：
 
 ```bash
-npm install -g wechat-notebank@0.3.1
+npm install -g wechat-notebank@0.4.0
 ```
 
 ### 当前版本边界

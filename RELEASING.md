@@ -2,12 +2,12 @@
 
 本项目通过 GitHub Release 附件与 npm registry 双通道发布（#41 决策，留档 `docs/adr/0001-npm-dual-channel-release.md`）。两个通道使用同一份经过边界校验的 npm `.tgz`；不要使用 GitHub 自动生成的 `Source code (zip)` 或 `Source code (tar.gz)` 作为安装源。
 
-## v0.3.1 发布前提
+## v0.4.0 发布前提
 
 - 发布提交已经进入 `main`，本地工作区干净且与 `origin/main` 一致。
-- `package.json`、`package-lock.json`、README 固定安装 URL、计划创建的 Tag 和 npm registry 都是 `0.3.1` / `v0.3.1`（npm 侧在发布后用 `npm view wechat-notebank version` 核对）。
+- `package.json`、`package-lock.json`、README 固定安装 URL、计划创建的 Tag 和 npm registry 都是 `0.4.0` / `v0.4.0`（npm 侧在发布后用 `npm view wechat-notebank version` 核对）。
 - 发布机器已安装 Node.js 20+、npm 和 Google Chrome；需要执行 Agent 安装验收时，使用 macOS Apple Silicon。
-- v0.3.0 的文章发现、图片本地化和 Markdown 转换已在上一版完成评审；v0.3.1 为维护版本（安装可靠性与首次体验修复，见 #26/#27-#32）。发布前必须确认离线测试与发布包清单检查通过。
+- v0.3.0 的文章发现、图片本地化和 Markdown 转换已在上一版完成评审；v0.4.0 为功能版本：npm registry 双通道首发与 Windows 核心支持（#41-#44，决策留档 `docs/adr/0001-npm-dual-channel-release.md`），另含并发归档同标题覆盖修复、代码块换行修复与 repo-hygiene 守卫（另一工作流同期合入）。发布前必须确认离线测试与发布包清单检查通过。
 
 ## 发布前真实网络手工验证
 
@@ -39,14 +39,14 @@
 npm ci
 npm test
 npm run release:pack
-(cd release && shasum -a 256 -c wechat-notebank-0.3.1.tgz.sha256)
+(cd release && shasum -a 256 -c wechat-notebank-0.4.0.tgz.sha256)
 ```
 
 `npm run release:pack` 会重新构建 CLI，生成以下两个文件：
 
 ```text
-release/wechat-notebank-0.3.1.tgz
-release/wechat-notebank-0.3.1.tgz.sha256
+release/wechat-notebank-0.4.0.tgz
+release/wechat-notebank-0.4.0.tgz.sha256
 ```
 
 发布验收需要连续执行两次 `npm run release:pack` 并比较两个 `.sha256` 文件的 SHA-256；
@@ -59,12 +59,12 @@ release/wechat-notebank-0.3.1.tgz.sha256
 只有在维护者明确授权发布后才执行：
 
 ```bash
-git tag -a v0.3.1 -m "发布 v0.3.1"
-git push origin v0.3.1
-gh release create v0.3.1 \
-  release/wechat-notebank-0.3.1.tgz \
-  release/wechat-notebank-0.3.1.tgz.sha256 \
-  --title "wechat-notebank v0.3.1" \
+git tag -a v0.4.0 -m "发布 v0.4.0"
+git push origin v0.4.0
+gh release create v0.4.0 \
+  release/wechat-notebank-0.4.0.tgz \
+  release/wechat-notebank-0.4.0.tgz.sha256 \
+  --title "wechat-notebank v0.4.0" \
   --notes-from-tag \
   --verify-tag
 ```
@@ -72,7 +72,7 @@ gh release create v0.3.1 \
 创建完成后，确认 GitHub Release 中两个附件都可下载，并核对 README 的固定安装地址：
 
 ```text
-https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-notebank-0.3.1.tgz
+https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.4.0/wechat-notebank-0.4.0.tgz
 ```
 
 不执行 `npm publish`，也不创建浮动 `latest` 下载地址。发现资产或文档不一致时停止发布，
@@ -92,12 +92,12 @@ npm 通道与 GitHub Release 使用同一份 tgz（同构建同 SHA）。在维�
 发布与验证：
 
 ```bash
-npm publish release/wechat-notebank-0.3.1.tgz
+npm publish release/wechat-notebank-0.4.0.tgz
 npm view wechat-notebank version
-# 应输出 0.3.1；再从 registry 安装冒烟：
-npm install -g wechat-notebank@0.3.1 --prefix "$HOME/.local/npm-smoke"
+# 应输出 0.4.0；再从 registry 安装冒烟：
+npm install -g wechat-notebank@0.4.0 --prefix "$HOME/.local/npm-smoke"
 "$HOME/.local/npm-smoke/bin/alskai-notebank" --version
-# 应输出 0.3.1；冒烟完成后删除 "$HOME/.local/npm-smoke"
+# 应输出 0.4.0；冒烟完成后删除 "$HOME/.local/npm-smoke"
 ```
 
 GitHub Release 通道保持固定 Tag 双附件不变；两个通道的版本号必须一致，
