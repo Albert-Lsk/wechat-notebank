@@ -1,11 +1,11 @@
 # 发布 wechat-notebank
 
-本项目通过 GitHub Release 附件发布，不发布到 npm registry。用户安装的是经过边界校验的 npm `.tgz`，不要使用 GitHub 自动生成的 `Source code (zip)` 或 `Source code (tar.gz)` 作为安装源。
+本项目通过 GitHub Release 附件与 npm registry 双通道发布（#41 决策）。两个通道使用同一份经过边界校验的 npm `.tgz`；不要使用 GitHub 自动生成的 `Source code (zip)` 或 `Source code (tar.gz)` 作为安装源。
 
 ## v0.3.1 发布前提
 
 - 发布提交已经进入 `main`，本地工作区干净且与 `origin/main` 一致。
-- `package.json`、`package-lock.json`、README 固定安装 URL 和计划创建的 Tag 都是 `0.3.1` / `v0.3.1`。
+- `package.json`、`package-lock.json`、README 固定安装 URL、计划创建的 Tag 和 npm registry 都是 `0.3.1` / `v0.3.1`（npm 侧在发布后用 `npm view wechat-notebank version` 核对）。
 - 发布机器已安装 Node.js 20+、npm 和 Google Chrome；需要执行 Agent 安装验收时，使用 macOS Apple Silicon。
 - v0.3.0 的文章发现、图片本地化和 Markdown 转换已在上一版完成评审；v0.3.1 为维护版本（安装可靠性与首次体验修复，见 #26/#27-#32）。发布前必须确认离线测试与发布包清单检查通过。
 
@@ -77,3 +77,28 @@ https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.3.1/wechat-no
 
 不执行 `npm publish`，也不创建浮动 `latest` 下载地址。发现资产或文档不一致时停止发布，
 修复后重新生成资产；不要用源码压缩包替代缺失的 `.tgz`。
+
+## 发布到 npm
+
+npm 通道与 GitHub Release 使用同一份 tgz（同构建同 SHA）。在维护者明确授权发布后执行。
+
+前提：
+
+- 维护者 npm 账号已开启 2FA。
+- 发布令牌未过期：read-write granular access token 最长 90 天，过期先到 npm
+  Settings → Access Tokens 轮换（创建令牌需要过一次安全密钥验证）。
+- 本机 `npm whoami` 输出维护者账号。
+
+发布与验证：
+
+```bash
+npm publish release/wechat-notebank-0.3.1.tgz
+npm view wechat-notebank version
+# 应输出 0.3.1；再从 registry 安装冒烟：
+npm install -g wechat-notebank@0.3.1 --prefix "$HOME/.local/npm-smoke"
+"$HOME/.local/npm-smoke/bin/alskai-notebank" --version
+# 应输出 0.3.1；冒烟完成后删除 "$HOME/.local/npm-smoke"
+```
+
+GitHub Release 通道保持固定 Tag 双附件不变；两个通道的版本号必须一致，
+发现不一致时停止发布并排查（通常是资产未重新生成）。

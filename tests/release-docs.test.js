@@ -19,7 +19,10 @@ assert.match(releasing, new RegExp(`${asset.replaceAll('.', '\\.')}\\.sha256`));
 assert.match(releasing, new RegExp(`gh release create ${tag.replaceAll('.', '\\.')}`));
 assert.match(releasing, /--notes-from-tag/);
 assert.match(releasing, /不要使用[^\n]*Source code|Source code[^\n]*不要使用/i);
-assert.match(releasing, /不发布[^\n]*npm registry/i);
+assert.match(releasing, /GitHub Release 附件与 npm registry 双通道发布/);
+assert.match(releasing, /npm publish release\//);
+assert.match(releasing, /npm view wechat-notebank version/);
+assert.match(releasing, /read-write granular access token 最长 90 天/);
 assert.match(readme, new RegExp(assetUrl.replaceAll('.', '\\.')));
 
 console.log('release docs tests passed');
