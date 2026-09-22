@@ -599,7 +599,7 @@ alskai-notebank import ./articles.xlsx
 默认推荐用 Progressive Summarization 的四层结构：
 
 ```text
-your-knowledge-base/
+your-knowledge-base/                          <-- 仅为示例名：vault 目录由 --output 指定、可任意命名（本仓库实际用 output/）
 ├── L1_原文/
 │   └── WeChat/                                <-- fetch 的 --output 指向这里
 │       └── 2026-04-13-文章标题.md              <-- fetch 时写入

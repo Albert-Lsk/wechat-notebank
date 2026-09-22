@@ -5,3 +5,5 @@ release/
 .wechat-notebank.json
 *.log
 .DS_Store
+.zcode/
+.video_agent/

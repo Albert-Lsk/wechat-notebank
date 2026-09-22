@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1000" width="1200" height="1000">
+  <style>
+    text { font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  </style>
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ea580c"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#9333ea"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="1000" fill="#ffffff"/>
+  <rect x="40" y="140" width="1120" height="115" rx="10" fill="#fafbfc" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <rect x="40" y="272" width="1120" height="312" rx="10" fill="#fafbfc" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <rect x="445" y="306" width="715" height="258" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <rect x="40" y="584" width="550" height="206" rx="10" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1.5"/>
+  <rect x="610" y="584" width="550" height="206" rx="10" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1.5"/>
+  <!-- arrows -->
+  <line x1="322" y1="205" x2="464" y2="205" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <line x1="732" y1="205" x2="874" y2="205" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <line x1="205" y1="369" x2="239" y2="369" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <line x1="380" y1="369" x2="459" y2="369" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <line x1="635" y1="369" x2="704" y2="369" stroke="#9333ea" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <line x1="880" y1="369" x2="939" y2="369" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="550" y1="425" x2="1030" y2="425" stroke="#16a34a" stroke-width="1.5"/>
+  <line x1="550" y1="425" x2="550" y2="441" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="795" y1="425" x2="795" y2="441" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <path d="M 1030,398 L 1030,441" stroke="#16a34a" stroke-width="1.5" fill="none" marker-end="url(#arrow-green)"/>
+  <line x1="80" y1="918" x2="1120" y2="918" stroke="#d1d5db" stroke-width="1.5"/>
+  <!-- nodes -->
+  <rect x="70" y="176" width="250" height="58" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <rect x="470" y="176" width="260" height="58" rx="8" fill="#faf5ff" stroke="#e9d5ff" stroke-width="1.5"/>
+  <rect x="880" y="176" width="250" height="58" rx="6" fill="#111827" stroke="#374151" stroke-width="1.5"/>
+  <rect x="60" y="340" width="145" height="58" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <rect x="245" y="340" width="135" height="58" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+  <rect x="465" y="340" width="170" height="58" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+  <rect x="710" y="340" width="170" height="58" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+  <rect x="945" y="340" width="170" height="58" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <rect x="465" y="445" width="170" height="58" rx="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+  <rect x="710" y="445" width="170" height="58" rx="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+  <rect x="945" y="445" width="170" height="58" rx="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+  <circle cx="150" cy="918" r="5" fill="#d1d5db"/>
+  <circle cx="430" cy="918" r="5" fill="#9ca3af"/>
+  <circle cx="710" cy="918" r="6.5" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/>
+  <circle cx="1010" cy="918" r="5" fill="#ffffff" stroke="#9ca3af" stroke-width="1.5"/>
+  <!-- text -->
+  <text x="60" y="46" font-size="26" font-weight="600" fill="#111827">wechat-notebank 项目全景图</text>
+  <text x="1140" y="46" text-anchor="end" font-size="11.5" fill="#9ca3af">CLI 命令名：alskai-notebank（旧名 wechat-notebank）</text>
+  <text x="60" y="78" font-size="14" fill="#374151">把微信公众号文章抓成本地 Markdown，再让 AI Agent 帮你加工成四层知识资产 —— 一切都在你自己的电脑上。</text>
+  <rect x="60" y="92" width="156" height="26" rx="13" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="138" y="109" text-anchor="middle" font-size="12" fill="#1d4ed8">本地优先 · 不上传</text>
+  <rect x="228" y="92" width="196" height="26" rx="13" fill="#faf5ff" stroke="#e9d5ff" stroke-width="1"/>
+  <text x="326" y="109" text-anchor="middle" font-size="12" fill="#7e22ce">Agent 是界面 · CLI 干粗活</text>
+  <rect x="436" y="92" width="200" height="26" rx="13" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="536" y="109" text-anchor="middle" font-size="12" fill="#15803d">四层渐进知识库 L1 → L4</text>
+  <text x="60" y="163" font-size="14" font-weight="600" fill="#111827">① 谁指挥谁 —— 你说人话，Agent 干活</text>
+  <text x="195" y="200" text-anchor="middle" font-size="14" font-weight="600" fill="#1e40af">你（知识管理者）</text>
+  <text x="195" y="220" text-anchor="middle" font-size="11" fill="#6b7280">微信文章越攒越多，想要自己的库</text>
+  <text x="600" y="200" text-anchor="middle" font-size="14" font-weight="600" fill="#7e22ce">AI Agent（Codex / Claude Code）</text>
+  <text x="600" y="220" text-anchor="middle" font-size="11" fill="#6b7280">读文章 · 出草稿 · 跟你对话</text>
+  <text x="1005" y="200" text-anchor="middle" font-size="14" font-weight="600" fill="#ffffff">alskai-notebank CLI</text>
+  <text x="1005" y="220" text-anchor="middle" font-size="11" fill="#d1d5db">抓取 / 校验 / 写盘 / 审批</text>
+  <text x="393" y="195" text-anchor="middle" font-size="11" fill="#ea580c">自然语言指挥</text>
+  <text x="803" y="195" text-anchor="middle" font-size="11" fill="#ea580c">调命令 · 读 JSON</text>
+  <text x="600" y="249" text-anchor="middle" font-size="11" fill="#9ca3af">Skill（说明书）由 setup 一键装进 Agent，doctor 负责体检</text>
+  <text x="60" y="295" font-size="14" font-weight="600" fill="#111827">② 主流水线 —— 一篇文章怎么变成知识资产</text>
+  <text x="465" y="328" font-size="13" font-weight="600" fill="#166534">你的知识库 —— Obsidian / Logseq 可直接打开</text>
+  <text x="132" y="364" text-anchor="middle" font-size="13.5" font-weight="600" fill="#9a3412">微信公众号文章</text>
+  <text x="132" y="384" text-anchor="middle" font-size="10.5" fill="#b45309">别人发的链接</text>
+  <text x="312" y="364" text-anchor="middle" font-size="13.5" font-weight="600" fill="#111827">fetch 抓取</text>
+  <text x="312" y="384" text-anchor="middle" font-size="10.5" fill="#6b7280">本机 Chrome 解析</text>
+  <text x="312" y="418" text-anchor="middle" font-size="10" fill="#6b7280">存原文不需要大模型 key</text>
+  <text x="550" y="364" text-anchor="middle" font-size="13.5" font-weight="600" fill="#111827">L1 原文</text>
+  <text x="550" y="384" text-anchor="middle" font-size="10.5" fill="#6b7280">抓下来的原文 Markdown</text>
+  <text x="795" y="364" text-anchor="middle" font-size="13.5" font-weight="600" fill="#9a3412">Inbox 加工包</text>
+  <text x="795" y="384" text-anchor="middle" font-size="10" fill="#b45309">Agent 草稿 · 等你审</text>
+  <text x="1030" y="364" text-anchor="middle" font-size="13.5" font-weight="600" fill="#1e40af">你来审批</text>
+  <text x="1030" y="384" text-anchor="middle" font-size="10" fill="#1d4ed8">pack approve · 逐条选</text>
+  <text x="790" y="417" text-anchor="middle" font-size="10" fill="#16a34a">发布为正式资产</text>
+  <text x="550" y="469" text-anchor="middle" font-size="13.5" font-weight="600" fill="#15803d">L2 原子卡片</text>
+  <text x="550" y="489" text-anchor="middle" font-size="10.5" fill="#6b7280">拆出来的观点笔记</text>
+  <text x="795" y="469" text-anchor="middle" font-size="13.5" font-weight="600" fill="#15803d">L3 引用素材</text>
+  <text x="795" y="489" text-anchor="middle" font-size="10.5" fill="#6b7280">能直接引用的素材</text>
+  <text x="1030" y="469" text-anchor="middle" font-size="13.5" font-weight="600" fill="#15803d">L4 阅读复盘</text>
+  <text x="1030" y="489" text-anchor="middle" font-size="10.5" fill="#6b7280">你自己的读后思考</text>
+  <text x="800" y="540" text-anchor="middle" font-size="11" fill="#15803d">双链：每份资产都指回原文，可追溯、可撤销（pack revoke）</text>
+  <text x="421" y="360" text-anchor="middle" font-size="10" fill="#2563eb">存为 Markdown</text>
+  <text x="669" y="360" text-anchor="middle" font-size="10" fill="#9333ea">AI 出草稿</text>
+  <text x="909" y="360" text-anchor="middle" font-size="10" fill="#16a34a">你点头</text>
+  <text x="60" y="612" font-size="14" font-weight="600" fill="#111827">CLI 命令速查 —— 记住这几个词就够</text>
+  <text x="60" y="642" font-size="12.5" font-weight="600" fill="#1d4ed8">fetch</text>
+  <text x="178" y="642" font-size="11.5" fill="#6b7280">存单篇文章</text>
+  <text x="60" y="672" font-size="12.5" font-weight="600" fill="#1d4ed8">import</text>
+  <text x="178" y="672" font-size="11.5" fill="#6b7280">从 Excel 批量导入</text>
+  <text x="60" y="702" font-size="12.5" font-weight="600" fill="#1d4ed8">setup</text>
+  <text x="178" y="702" font-size="11.5" fill="#6b7280">把 Skill 装进 Agent</text>
+  <text x="60" y="732" font-size="12.5" font-weight="600" fill="#1d4ed8">doctor</text>
+  <text x="178" y="732" font-size="11.5" fill="#6b7280">只读体检，不改东西</text>
+  <text x="330" y="642" font-size="12.5" font-weight="600" fill="#1d4ed8">pack create</text>
+  <text x="452" y="642" font-size="11.5" fill="#6b7280">Agent 生成待审包</text>
+  <text x="330" y="672" font-size="12.5" font-weight="600" fill="#1d4ed8">pack approve</text>
+  <text x="452" y="672" font-size="11.5" fill="#6b7280">挑着发布为正式资产</text>
+  <text x="330" y="702" font-size="12.5" font-weight="600" fill="#1d4ed8">pack update</text>
+  <text x="452" y="702" font-size="11.5" fill="#6b7280">补充你的 L4 回答</text>
+  <text x="330" y="732" font-size="12.5" font-weight="600" fill="#1d4ed8">pack revoke</text>
+  <text x="452" y="732" font-size="11.5" fill="#6b7280">拒绝 / 撤销已发布</text>
+  <text x="60" y="768" font-size="11" fill="#374151">全部命令支持 --json：结果只有一行纯 JSON，Agent 直接读</text>
+  <text x="630" y="612" font-size="14" font-weight="600" fill="#111827">不怕出错的底盘 —— 数据安全靠它们</text>
+  <circle cx="636" cy="638" r="3" fill="#9ca3af"/>
+  <text x="648" y="642" font-size="12.5" font-weight="600" fill="#111827">文件事务</text>
+  <text x="742" y="642" font-size="11.5" fill="#6b7280">要么全成、要么整体回滚，断电不留半套</text>
+  <circle cx="636" cy="668" r="3" fill="#9ca3af"/>
+  <text x="648" y="672" font-size="12.5" font-weight="600" fill="#111827">来源锁</text>
+  <text x="742" y="672" font-size="11.5" fill="#6b7280">同一篇链接绝不存两遍</text>
+  <circle cx="636" cy="698" r="3" fill="#9ca3af"/>
+  <text x="648" y="702" font-size="12.5" font-weight="600" fill="#111827">双层配置</text>
+  <text x="742" y="702" font-size="11.5" fill="#6b7280">全局 + 项目两层，项目里的优先</text>
+  <circle cx="636" cy="728" r="3" fill="#9ca3af"/>
+  <text x="648" y="732" font-size="12.5" font-weight="600" fill="#111827">稳定错误码</text>
+  <text x="742" y="732" font-size="11.5" fill="#6b7280">出错也是结构化 JSON，Agent 能看懂</text>
+  <text x="60" y="838" font-size="14" font-weight="600" fill="#111827">③ 项目走到哪了 —— v0.2.0 已发布，正在等真人验证</text>
+  <text x="150" y="886" text-anchor="middle" font-size="12.5" font-weight="600" fill="#374151">2026-04 · 起步</text>
+  <text x="150" y="904" text-anchor="middle" font-size="10.5" fill="#9ca3af">只做抓取、存文章</text>
+  <text x="430" y="886" text-anchor="middle" font-size="12.5" font-weight="600" fill="#374151">2026-07-19 · v0.2.0 发布</text>
+  <text x="430" y="904" text-anchor="middle" font-size="10.5" fill="#9ca3af">归档 + 加工闭环 · 仅 GitHub Release</text>
+  <text x="710" y="864" text-anchor="middle" font-size="10.5" font-weight="600" fill="#2563eb">← 你在这里</text>
+  <text x="710" y="886" text-anchor="middle" font-size="12.5" font-weight="600" fill="#111827">现在 · 规划期</text>
+  <text x="710" y="904" text-anchor="middle" font-size="10.5" fill="#6b7280">找 3-5 位真人验证 · SEO/GEO 策略待授权</text>
+  <text x="1010" y="886" text-anchor="middle" font-size="12.5" font-weight="600" fill="#374151">未来 · v0.3.0</text>
+  <text x="1010" y="904" text-anchor="middle" font-size="10.5" fill="#9ca3af">范围由真人证据说了算</text>
+  <!-- legend -->
+  <line x1="60" y1="968" x2="90" y2="968" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+  <text x="96" y="972" font-size="11" fill="#6b7280">主流程 · 数据往哪走</text>
+  <line x1="240" y1="968" x2="270" y2="968" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <text x="276" y="972" font-size="11" fill="#6b7280">指挥与调用</text>
+  <line x1="390" y1="968" x2="420" y2="968" stroke="#9333ea" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <text x="426" y="972" font-size="11" fill="#6b7280">Agent 生成草稿</text>
+  <line x1="570" y1="968" x2="600" y2="968" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <text x="606" y="972" font-size="11" fill="#6b7280">你批准后发布</text>
+  <line x1="730" y1="968" x2="760" y2="968" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="766" y="972" font-size="11" fill="#6b7280">分组 / 边界</text>
+  <text x="1140" y="972" text-anchor="end" font-size="10" fill="#9ca3af">依据 README · spec · CONTEXT.md 整理 · 2026-08-30</text>
+</svg>
