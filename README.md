@@ -56,7 +56,7 @@ alskai-notebank "https://mp.weixin.qq.com/s/xxxxx" -o ~/WeChatArticles
 - 🔍 支持通过搜狗和今天看啥镜像发现公众号文章，再把返回的微信直链交给 `fetch`
 - 📡 支持读取 RSS 2.0 / Atom / JSON Feed 订阅源，枚举文章列表（`import-rss`，只读不落盘）
 - 🔒 保存原文不依赖大模型；内容加工复用当前 Agent，不需要额外 API key
-- 💻 Windows / macOS / Linux 都可用，前提是本机能运行 Node.js 和 Chrome
+- 💻 macOS / Linux 可用；Windows 已发布的 v0.4.0 存在归档错误，见下文说明
 
 ## 🧰 环境要求
 
@@ -117,7 +117,9 @@ Windows 上从固定 Release 单行安装（npm 全局目录在当前用户配�
 npm install -g "https://github.com/Albert-Lsk/wechat-notebank/releases/download/v0.4.0/wechat-notebank-0.4.0.tgz"
 ```
 
-安装后运行 `alskai-notebank --version` 验证。Windows 的核心命令（fetch、import、search、import-rss、pack）代码路径已适配并有单测覆盖，但尚未在真实 Windows 机器完成端到端验收，遇到问题请提 issue；`setup`（Agent 集成安装）仍仅支持 macOS Apple Silicon。
+安装后运行 `alskai-notebank --version` 验证。
+
+**已知问题：已发布的 v0.4.0 在 Windows 上归档文章时会报「无法读取进程启动身份」。** 这是版本自身的兼容问题，重新安装 v0.4.0 无法修复。当前源码已针对该问题修改，但修复尚未正式发布，也尚未完成真实 Windows 机器的端到端验收。`setup`（Agent 集成安装）仍仅支持 macOS Apple Silicon。
 
 `~/.local` 是当前用户可写目录，因此不需要 `sudo`，也不用修改 shell 配置。安装或更新 Agent 集成时，必须明确目标。可以先预演，再正式执行：
 

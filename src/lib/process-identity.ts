@@ -1,4 +1,5 @@
 import { execFile } from 'child_process';
+import * as path from 'path';
 import { promisify } from 'util';
 
 const PROCESS_IDENTITY_CACHE_MS = 1_000;
@@ -23,7 +24,18 @@ export async function getProcessIdentity(
     return cached.result;
   }
 
-  let result: ProcessIdentityResult;
+  const result = process.platform === 'win32'
+    ? await getWindowsProcessIdentity(pid)
+    : await getPosixProcessIdentity(pid);
+
+  processIdentityCache.set(pid, {
+    result,
+    expiresAt: Date.now() + PROCESS_IDENTITY_CACHE_MS,
+  });
+  return result;
+}
+
+async function getPosixProcessIdentity(pid: number): Promise<ProcessIdentityResult> {
   try {
     const { stdout } = await execFileAsync('/bin/ps', [
       '-p',
@@ -39,20 +51,52 @@ export async function getProcessIdentity(
       },
     });
     const identity = stdout.trim();
-    result = identity
+    return identity
       ? { status: 'found', identity }
       : { status: 'unknown' };
   } catch (error) {
-    result = hasNumericErrorCode(error, 1)
+    return hasNumericErrorCode(error, 1)
       ? { status: 'missing' }
       : { status: 'unknown' };
   }
+}
 
-  processIdentityCache.set(pid, {
-    result,
-    expiresAt: Date.now() + PROCESS_IDENTITY_CACHE_MS,
-  });
-  return result;
+async function getWindowsProcessIdentity(pid: number): Promise<ProcessIdentityResult> {
+  // GetProcessById accepts Int32; never interpolate an unvalidated value into PowerShell.
+  if (!Number.isInteger(pid) || pid <= 0 || pid > 2147483647) {
+    return { status: 'unknown' };
+  }
+
+  const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT;
+  const powershell = systemRoot
+    ? path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+    : 'powershell.exe';
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    `try { $p = [System.Diagnostics.Process]::GetProcessById(${pid}) } catch { ` +
+      '$e = $_.Exception; while ($e.InnerException) { $e = $e.InnerException }; ' +
+      'if ($e -is [System.ArgumentException]) { exit 3 }; exit 2 }',
+    'try { [Console]::Out.WriteLine($p.StartTime.ToUniversalTime().Ticks.ToString(' +
+      '[System.Globalization.CultureInfo]::InvariantCulture)) } ' +
+      'catch { exit 2 } finally { $p.Dispose() }',
+  ].join('; ');
+
+  try {
+    const { stdout } = await execFileAsync(
+      powershell,
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command],
+      { windowsHide: true }
+    );
+    const identity = stdout.trim();
+    return /^\d+$/.test(identity)
+      ? { status: 'found', identity }
+      : { status: 'unknown' };
+  } catch (error) {
+    // Other failures (including access denied) must not make an active lock look stale.
+    return hasNumericErrorCode(error, 3)
+      ? { status: 'missing' }
+      : { status: 'unknown' };
+  }
 }
 
 function hasNumericErrorCode(error: unknown, code: number): boolean {
